@@ -4,6 +4,7 @@
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/controls/Mouse.h"
+#include "soh/Enhancements/controls/SoulsInput.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
 
@@ -236,6 +237,11 @@ void PadMgr_ProcessInputs(PadMgr* padMgr) {
                 if (emulatedButtons) {
                     input->cur.button |= emulatedButtons;
                     GameInteractor_SetEmulatedButtons(0);
+                }
+
+                // Souls of Harkinian: menu vs. play layout (port 1 only; off unless enabled)
+                if (i == 0) {
+                    SoulsInput_Transform(&input->cur.button);
                 }
 
                 if (GameInteractor_ReverseControlsActive()) {
