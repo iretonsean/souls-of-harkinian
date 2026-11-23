@@ -8,7 +8,10 @@
 //   Square     -> C-left
 //   R1/R2      -> B, L1/L3 -> R, L2/R3 -> Z, Options -> Start
 //
-// In play: the D-pad acts as the C buttons (items, Navi, ocarina notes) and Cross acts as C-down.
+// In play: the D-pad acts as the C buttons (items, Navi, ocarina notes) and Cross jumps: it uses the
+// Roc's Feather jump (Enhancements/randomizer/RocsFeather.cpp) as a built-in move, so the feather
+// never sits on a button, in the inventory or on the HUD. The game's own item-button checks apply
+// (no jump while carrying something or in a cutscene; one jump until Link lands).
 // In menus (pause screen, file select / title, text boxes): the D-pad stays the D-pad, so with
 // "D-pad Support on Pause Screen" and "D-pad Support in Text Boxes" on it moves the cursor;
 // Cross confirms (A), Circle goes back (B), and holding R1 (B) while pressing a D-pad direction
@@ -16,12 +19,20 @@
 #include <libultraship/bridge/consolevariablebridge.h>
 #include "SoulsInput.h"
 #include "soh/OTRGlobals.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/ShipInit.hpp"
 
 extern "C" {
 #include "z64.h"
 #include "macros.h"
+#include "z64player.h"
 extern PlayState* gPlayState;
 }
+
+// Cross pressed in play: jump on the next item-button check (within 2 gameplay frames)
+static bool sJumpPending = false;
+static u32 sJumpFrame = 0;
+static bool sCrossWasDown = false;
 
 #define CVAR_SOULS_CONTROLS CVAR_ENHANCEMENT("SoulsControls")
 #define BTN_SOULS_MOD1 0x0040 // BTN_CUSTOM_MODIFIER1 (Circle also sends it)
@@ -64,9 +75,12 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
 
     if (!SoulsInput_InMenu()) {
         out |= SoulsInput_DpadToC(in);
-        if (in & BTN_L) {
-            out |= BTN_CDOWN; // Cross = C-down (Roc's Feather)
+        bool cross = (in & BTN_L) != 0;
+        if (cross && !sCrossWasDown && gPlayState != nullptr) {
+            sJumpPending = true;
+            sJumpFrame = gPlayState->gameplayFrames;
         }
+        sCrossWasDown = cross;
         *buttons = out;
         return;
     }
@@ -87,5 +101,26 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     if (in & BTN_L) {
         out |= BTN_A; // Cross: confirm
     }
+    sCrossWasDown = (in & BTN_L) != 0;
+    sJumpPending = false;
     *buttons = out;
 }
+
+static void RegisterSoulsJump() {
+    COND_VB_SHOULD(VB_OVERRIDE_BUTTON_ITEM_USED, CVarGetInteger(CVAR_SOULS_CONTROLS, 0), {
+        s32* i = va_arg(args, s32*);
+        Player* player = va_arg(args, Player*);
+        s32* item = va_arg(args, s32*);
+        (void)i;
+        (void)player;
+        if (!sJumpPending) {
+            return;
+        }
+        sJumpPending = false;
+        if (gPlayState != nullptr && gPlayState->gameplayFrames - sJumpFrame <= 2 && *item >= ITEM_NONE_FE) {
+            *item = ITEM_ROCS_FEATHER; // handled by the Roc's Feather hook: jump, no held item change
+        }
+    });
+}
+
+static RegisterShipInitFunc initSoulsJump(RegisterSoulsJump, { CVAR_SOULS_CONTROLS });
