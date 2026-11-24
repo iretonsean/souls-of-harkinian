@@ -8,8 +8,8 @@
 //
 // Every color writes the same settings the Cosmetics Editor uses, then applies them at once; SoulsLook.cpp stores them
 // with the save file, so each file keeps its own look and path.
-// Controls: D-pad / stick move, A (Cross) picks, B (Circle) goes back, Start = Done, R or Z switches the preview age.
-// The Name row opens the game's name entry and returns here when the name is confirmed.
+// Controls: D-pad / stick move, A (Cross) picks, B (Circle) goes back, Start = Done, L1 (N64 R / Z in menus) switches
+// the preview age. The Name row opens the game's name entry and returns here when the name is confirmed.
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <cstdio>
 #include <cstdlib>
@@ -20,6 +20,7 @@
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipUtils.h"
+#include "soh/frame_interpolation.h"
 extern "C" {
 #include "z64.h"
 #include "functions.h"
@@ -372,14 +373,18 @@ void FinishCreator(FileChooseContext* ctx) {
     }
 }
 
+// The drawing code is outside the anonymous namespace: OPEN_DISPS declares frame interpolation functions that
+// must have C linkage.
+} // namespace
+
 // ---------------------------------------------------------------------------------------------------------------
 // Drawing helpers (320x240 screen space)
 
-int Fade(int base) {
+static int Fade(int base) {
     return base * sAlpha / 255;
 }
 
-void UiRect(GraphicsContext* gfx, int x, int y, int w, int h, int r, int g, int b, int a) {
+static void UiRect(GraphicsContext* gfx, int x, int y, int w, int h, int r, int g, int b, int a) {
     if (a <= 0 || w <= 0 || h <= 0) {
         return;
     }
@@ -393,12 +398,12 @@ void UiRect(GraphicsContext* gfx, int x, int y, int w, int h, int r, int g, int 
                     G_AC_NONE | G_ZS_PIXEL | G_RM_CLD_SURF | G_RM_CLD_SURF2);
     gDPSetCombineMode(POLY_OPA_DISP++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, r, g, b, a);
-    gDPFillRectangle(POLY_OPA_DISP++, x, y, x + w - 1, y + h - 1);
+    gDPFillRectangle(POLY_OPA_DISP++, x, y, x + w, y + h); // one-cycle rectangles end exclusive
     CLOSE_DISPS(gfx);
 }
 
 // Draws a line of text and returns its width in pixels
-int UiText(GraphicsContext* gfx, const char* text, int x, int y, int r, int g, int b, float scale) {
+static int UiText(GraphicsContext* gfx, const char* text, int x, int y, int r, int g, int b, float scale) {
     OPEN_DISPS(gfx);
     Gfx_SetupDL_39Opa(gfx);
     gDPSetCombineLERP(POLY_OPA_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0, PRIMITIVE,
@@ -409,7 +414,7 @@ int UiText(GraphicsContext* gfx, const char* text, int x, int y, int r, int g, i
 }
 
 // Width of a text in pixels (same rule as Interface_DrawTextLine)
-int TextWidth(const char* text, float scale) {
+static int TextWidth(const char* text, float scale) {
     int width = 0;
     for (const char* c = text; *c != '\0'; c++) {
         width += (uint16_t)(Ship_GetCharFontWidth((u8)*c) * (R_TEXT_CHAR_SCALE / 100.0f) * scale);
@@ -418,7 +423,7 @@ int TextWidth(const char* text, float scale) {
 }
 
 // A framed dark-blue panel with a vertical gradient, like the prototype's window
-void UiPanel(GraphicsContext* gfx, int x, int y, int w, int h, int alpha) {
+static void UiPanel(GraphicsContext* gfx, int x, int y, int w, int h, int alpha) {
     UiRect(gfx, x - 1, y - 1, w + 2, h + 2, 150, 180, 255, Fade(alpha));
     const int strips = 8;
     for (int i = 0; i < strips; i++) {
@@ -435,7 +440,7 @@ const int kGapPx = 4;
 const int kPanelX = 6, kPanelY = 6, kPanelW = 198, kPanelH = 228;
 const int kRowX = 12, kRowW = 186;
 
-int RowY(const CItem* rows, int index) {
+static int RowY(const CItem* rows, int index) {
     int y = kRowsTop;
     for (int i = 0; i <= index; i++) {
         if (rows[i].gap) {
@@ -449,13 +454,13 @@ int RowY(const CItem* rows, int index) {
 }
 
 // Three bars of falling length: the prototype's "submenu" mark
-void SubmenuMark(GraphicsContext* gfx, int x, int y) {
+static void SubmenuMark(GraphicsContext* gfx, int x, int y) {
     UiRect(gfx, x, y + 3, 10, 1, 207, 217, 245, Fade(255));
     UiRect(gfx, x + 2, y + 6, 8, 1, 207, 217, 245, Fade(255));
     UiRect(gfx, x + 4, y + 9, 6, 1, 207, 217, 245, Fade(255));
 }
 
-void UiHighlight(GraphicsContext* gfx, int x, int y, int w, int h) {
+static void UiHighlight(GraphicsContext* gfx, int x, int y, int w, int h) {
     UiRect(gfx, x, y, w, h, 110, 160, 255, Fade(90));
     UiRect(gfx, x, y, w, 1, 210, 230, 255, Fade(230));
     UiRect(gfx, x, y + h - 1, w, 1, 210, 230, 255, Fade(230));
@@ -464,7 +469,7 @@ void UiHighlight(GraphicsContext* gfx, int x, int y, int w, int h) {
 }
 
 // "< value >" in the value column
-void ChoiceText(GraphicsContext* gfx, const char* value, int x, int y, bool arrows) {
+static void ChoiceText(GraphicsContext* gfx, const char* value, int x, int y, bool arrows) {
     float scale = kTextScale;
     int w = TextWidth(value, scale);
     if (w > 70) {
@@ -480,7 +485,7 @@ void ChoiceText(GraphicsContext* gfx, const char* value, int x, int y, bool arro
     }
 }
 
-const char* ChoiceName(const CItem& item) {
+static const char* ChoiceName(const CItem& item) {
     if (item.type == IT_PATH || item.type == IT_CHOICE) {
         int v = *item.var;
         return item.opts[v < 0 || v >= item.optCount ? 0 : v];
@@ -488,7 +493,7 @@ const char* ChoiceName(const CItem& item) {
     return "";
 }
 
-void DrawRow(FileChooseContext* ctx, const CItem& item, int y, bool selected, bool inMenu) {
+static void DrawRow(FileChooseContext* ctx, const CItem& item, int y, bool selected, bool inMenu) {
     GraphicsContext* gfx = ctx->state.gfxCtx;
     char buf[16];
     UiRect(gfx, kRowX, y, kRowW, kRowH, 20, 40, 100, Fade(150));
@@ -533,7 +538,7 @@ void DrawRow(FileChooseContext* ctx, const CItem& item, int y, bool selected, bo
 }
 
 // Splits text into lines that fit the width
-std::vector<std::string> WrapText(const char* text, int maxWidth, float scale) {
+static std::vector<std::string> WrapText(const char* text, int maxWidth, float scale) {
     std::vector<std::string> lines;
     std::string line, word;
     std::string all = std::string(text) + " ";
@@ -557,21 +562,21 @@ std::vector<std::string> WrapText(const char* text, int maxWidth, float scale) {
     return lines;
 }
 
-const char* DescriptionFor(const CItem& item) {
+static const char* DescriptionFor(const CItem& item) {
     if (item.type == IT_PATH) {
         return kPathDesc[sPath];
     }
     return item.desc != nullptr ? item.desc : "";
 }
 
-void DrawColorPicker(FileChooseContext* ctx) {
+static void DrawColorPicker(FileChooseContext* ctx) {
     GraphicsContext* gfx = ctx->state.gfxCtx;
     int count;
     const CItem& item = CurRows(count)[sSubCur];
     Color_RGBA8 c = item.changed ? item.color : item.def;
 
     UiRect(gfx, 0, 0, 320, 240, 0, 4, 20, Fade(130));
-    UiPanel(gfx, 50, 26, 220, 188, 245);
+    UiPanel(gfx, 50, 26, 220, 188, 255);
     UiText(gfx, item.label, 62, 32, 255, 255, 255, 0.8f);
     UiRect(gfx, 61, 51, 198, 12, 230, 238, 255, Fade(255));
     UiRect(gfx, 62, 52, 196, 10, c.r, c.g, c.b, Fade(255));
@@ -603,10 +608,10 @@ void DrawColorPicker(FileChooseContext* ctx) {
     UiText(gfx, "(X) Pick   (O) Cancel", 62, 196, 200, 215, 245, 0.55f);
 }
 
-void DrawConfirm(FileChooseContext* ctx) {
+static void DrawConfirm(FileChooseContext* ctx) {
     GraphicsContext* gfx = ctx->state.gfxCtx;
     UiRect(gfx, 0, 0, 320, 240, 0, 4, 20, Fade(115));
-    UiPanel(gfx, 80, 80, 160, 78, 245);
+    UiPanel(gfx, 80, 80, 160, 78, 255);
     UiText(gfx, "Is this OK?", 100, 88, 255, 255, 255, 0.85f);
     char name[16];
     if (FileChoose_GetNewFileName(ctx, name, sizeof(name)) == 0) {
@@ -622,13 +627,13 @@ void DrawConfirm(FileChooseContext* ctx) {
 }
 
 // The left panel, labels, description box and button prompts
-void DrawMain(FileChooseContext* ctx) {
+static void DrawMain(FileChooseContext* ctx) {
     GraphicsContext* gfx = ctx->state.gfxCtx;
     int count;
     CItem* rows = CurRows(count);
     int cur = sMenu < 0 ? sRootCur : sSubCur;
 
-    UiPanel(gfx, kPanelX, kPanelY, kPanelW, kPanelH, 235);
+    UiPanel(gfx, kPanelX, kPanelY, kPanelW, kPanelH, 255);
     UiText(gfx, "Create Character", 16, 10, 255, 255, 255, 0.85f);
     std::string sub = "Detailed Look";
     if (sMenu >= 0) {
@@ -656,12 +661,12 @@ void DrawMain(FileChooseContext* ctx) {
         UiText(gfx, lines[i].c_str(), 212, 190 + (int)i * 11, 255, 255, 255, 0.55f);
     }
 
-    // Age labels over the preview: the active one white, the other dimmed
-    UiText(gfx, "L1 Child", 216, 8, sAge == 0 ? 255 : 150, sAge == 0 ? 255 : 165, sAge == 0 ? 255 : 200, 0.6f);
-    UiText(gfx, "Adult R1", 262, 8, sAge == 1 ? 255 : 150, sAge == 1 ? 255 : 165, sAge == 1 ? 255 : 200, 0.6f);
+    // Age labels over the preview: the active one white, the other dimmed. L1 switches (R1 is Back in the Souls
+    // layout).
+    UiText(gfx, "Child", 218, 8, sAge == 0 ? 255 : 150, sAge == 0 ? 255 : 165, sAge == 0 ? 255 : 200, 0.6f);
+    UiText(gfx, "(L1)", 250, 8, 190, 205, 235, 0.5f);
+    UiText(gfx, "Adult", 276, 8, sAge == 1 ? 255 : 150, sAge == 1 ? 255 : 165, sAge == 1 ? 255 : 200, 0.6f);
 }
-
-} // namespace
 
 // ---------------------------------------------------------------------------------------------------------------
 // Entry points
@@ -925,7 +930,9 @@ extern "C" void SoulsCreator_DrawPreview(void* state) {
     LinkAnimation_Update(sPreviewPlay, &sPreviewSkel);
 
     // Right side of the 320x240 screen, above the description box
-    const s32 vx = 214, vy = 20, vw = 98, vh = 160;
+    // (the viewport is stretched over the whole 16:9 screen while the 2D drawing is a centered 4:3 area, so it is
+    // narrower)
+    const s32 vx = 202, vy = 20, vw = 74, vh = 160;
     static Vp viewport;
     static Lights1 lights = gdSPDefLights1(80, 80, 80, 255, 255, 255, 84, 84, -84);
     Vec3f lightDir = { 89.8f, 0.0f, 89.8f };
@@ -950,7 +957,7 @@ extern "C" void SoulsCreator_DrawPreview(void* state) {
     viewport.vp.vtrans[1] = (vy + vh / 2) * 4;
     viewport.vp.vtrans[2] = G_MAXZ / 2;
     gSPViewport(POLY_OPA_DISP++, &viewport);
-    guPerspective(perspMtx, &perspNorm, 60.0f, (f32)vw / (f32)vh, 10.0f, 4000.0f, 1.0f);
+    guPerspective(perspMtx, &perspNorm, 60.0f, 98.0f / 160.0f, 10.0f, 4000.0f, 1.0f);
     gSPPerspNormalize(POLY_OPA_DISP++, perspNorm);
     gSPMatrix(POLY_OPA_DISP++, perspMtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
     guLookAt(lookAtMtx, eye.x, eye.y, eye.z, at.x, at.y, at.z, 0.0f, 1.0f, 0.0f);
