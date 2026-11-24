@@ -1,0 +1,117 @@
+{
+  "comment": "Schematic map of Hyrule for Souls of Harkinian. Every shape, position and icon here is our own simple drawing data (ellipses with a seeded wobble, lines, glyphs), placed by hand. No texture, sprite or trace from the game or from fan maps. Map space: 1200 x 720, y down. make_map.py renders hyrule-chests.svg and hyrule-chests.png from this file.",
+  "size": [1200, 720],
+  "land": [
+    {"id": "wasteland", "c": [150, 200], "r": [150, 115], "seed": 1},
+    {"id": "valley", "c": [320, 250], "r": [95, 160], "seed": 2},
+    {"id": "field", "c": [570, 360], "r": [255, 185], "seed": 3},
+    {"id": "castle", "c": [565, 135], "r": [135, 95], "seed": 4},
+    {"id": "deathmtn", "c": [790, 95], "r": [155, 95], "seed": 5},
+    {"id": "kakariko", "c": [840, 225], "r": [110, 75], "seed": 6},
+    {"id": "zora", "c": [1070, 140], "r": [115, 115], "seed": 7},
+    {"id": "zoraRiver", "c": [930, 270], "r": [150, 55], "seed": 8},
+    {"id": "forest", "c": [975, 445], "r": [195, 150], "seed": 9},
+    {"id": "lakeLand", "c": [420, 595], "r": [175, 110], "seed": 10},
+    {"id": "lakeNeck", "c": [470, 515], "r": [95, 75], "seed": 11}
+  ],
+  "terrain": [
+    {"kind": "desert", "c": [145, 205], "r": [130, 98], "seed": 21},
+    {"kind": "canyon", "c": [322, 255], "r": [72, 140], "seed": 22},
+    {"kind": "field", "c": [570, 360], "r": [225, 160], "seed": 23},
+    {"kind": "grove", "c": [565, 120], "r": [105, 70], "seed": 24},
+    {"kind": "mountain", "c": [790, 88], "r": [135, 78], "seed": 25},
+    {"kind": "village", "c": [840, 230], "r": [80, 52], "seed": 26},
+    {"kind": "rock", "c": [1075, 135], "r": [95, 95], "seed": 27},
+    {"kind": "forest", "c": [975, 450], "r": [170, 128], "seed": 28},
+    {"kind": "meadow", "c": [1075, 370], "r": [55, 38], "seed": 29},
+    {"kind": "water", "c": [415, 605], "r": [118, 70], "seed": 30},
+    {"kind": "water", "c": [1048, 178], "r": [48, 34], "seed": 31},
+    {"kind": "water", "c": [1110, 78], "r": [52, 32], "seed": 32},
+    {"kind": "lava", "c": [785, 42], "r": [34, 18], "seed": 33}
+  ],
+  "rivers": [
+    [[1030, 190], [960, 240], [880, 285], [790, 300], [700, 250], [640, 205], [600, 195]],
+    [[300, 120], [320, 190], [335, 280], [350, 380], [375, 470], [398, 545]]
+  ],
+  "roads": [
+    [[570, 370], [565, 215]],
+    [[570, 370], [680, 300], [770, 255]],
+    [[570, 370], [700, 390], [800, 420]],
+    [[570, 370], [520, 450], [455, 540]],
+    [[570, 370], [460, 330], [390, 300]],
+    [[770, 255], [760, 170], [740, 120]]
+  ],
+  "areaLabels": [
+    {"text": "Hyrule Field", "at": [640, 455]},
+    {"text": "Haunted Wasteland", "at": [150, 150]},
+    {"text": "Gerudo Valley", "at": [298, 330], "rotate": -72},
+    {"text": "Lost Woods", "at": [880, 365]},
+    {"text": "Lake Hylia", "at": [415, 690]},
+    {"text": "Death Mountain", "at": [848, 152]}
+  ],
+  "poi": [
+    {"type": "village", "name": "Castle Town", "at": [605, 185]},
+    {"type": "village", "name": "Kakariko Village", "at": [820, 235], "label": "below"},
+    {"type": "village", "name": "Goron City", "at": [870, 100]},
+    {"type": "village", "name": "Zora's Domain", "at": [1048, 178], "label": "below"},
+    {"type": "village", "name": "Kokiri Forest", "at": [985, 505]},
+    {"type": "village", "name": "Gerudo's Fortress", "at": [255, 150], "label": "below"},
+    {"type": "village", "name": "Lon Lon Ranch", "at": [570, 370], "label": "below"},
+
+    {"type": "temple", "name": "Temple of Time", "at": [540, 200], "label": "left"},
+    {"type": "dungeon", "name": "Inside the Deku Tree", "at": [1075, 535], "label": "below"},
+    {"type": "dungeon", "name": "Dodongo's Cavern", "at": [715, 120], "label": "left"},
+    {"type": "dungeon", "name": "Jabu-Jabu's Belly", "at": [1140, 105], "label": "below"},
+    {"type": "dungeon", "name": "Forest Temple", "at": [1095, 345], "label": "above"},
+    {"type": "dungeon", "name": "Fire Temple", "at": [810, 28]},
+    {"type": "dungeon", "name": "Water Temple", "at": [420, 612], "label": "below"},
+    {"type": "dungeon", "name": "Shadow Temple", "at": [925, 180], "label": "above"},
+    {"type": "dungeon", "name": "Spirit Temple", "at": [55, 230], "label": "below"},
+    {"type": "dungeon", "name": "Ice Cavern", "at": [1150, 55], "label": "left"},
+    {"type": "dungeon", "name": "Bottom of the Well", "at": [790, 262], "label": "below"},
+    {"type": "dungeon", "name": "Gerudo Training Ground", "at": [215, 110], "label": "above"},
+    {"type": "dungeon", "name": "Hyrule Castle / Ganon's Castle", "at": [565, 85], "label": "above"},
+
+    {"type": "landmark", "name": "Graveyard", "at": [905, 205], "label": "below"},
+    {"type": "landmark", "name": "Sacred Forest Meadow", "at": [1075, 385], "label": "below"},
+    {"type": "landmark", "name": "Desert Colossus", "at": [70, 275], "label": "below"},
+    {"type": "landmark", "name": "Zora's Fountain", "at": [1108, 70], "label": "none"},
+    {"type": "landmark", "name": "Lake laboratory", "at": [330, 560], "label": "left"},
+    {"type": "landmark", "name": "Gerudo Valley bridge", "at": [330, 205], "label": "none"},
+
+    {"type": "fairy", "name": "Great Fairy (Din's Fire)", "at": [625, 75]},
+    {"type": "fairy", "name": "Great Fairy (Magic)", "at": [835, 50]},
+    {"type": "fairy", "name": "Great Fairy (Double Magic)", "at": [745, 35]},
+    {"type": "fairy", "name": "Great Fairy (Farore's Wind)", "at": [1080, 45]},
+    {"type": "fairy", "name": "Great Fairy (Nayru's Love)", "at": [100, 300]},
+    {"type": "fairy", "name": "Great Fairy (Double Defense)", "at": [505, 70]},
+
+    {"type": "shop", "name": "Market shops", "at": [632, 170]},
+    {"type": "shop", "name": "Kakariko shops", "at": [850, 222]},
+    {"type": "shop", "name": "Kokiri Shop", "at": [960, 520]},
+    {"type": "shop", "name": "Goron Shop", "at": [890, 118]},
+    {"type": "shop", "name": "Zora Shop", "at": [1022, 195]},
+
+    {"type": "grotto", "name": "Lost Woods grotto", "at": [860, 420]},
+    {"type": "grotto", "name": "Kakariko open grotto", "at": [868, 262]},
+    {"type": "grotto", "name": "Death Mountain Trail storms grotto", "at": [745, 150]}
+  ],
+  "chests": {
+    "status": "DRAFT: placements wait for the owner's approval.",
+    "list": [
+      {"n": 1, "sword": "Longer Kokiri Sword", "creator": "nickelndime246", "age": "child", "class": "Kokiri", "where": "Lost Woods grotto (rupee chest)", "at": [860, 420]},
+      {"n": 2, "sword": "Razor Sword", "creator": "Reppan", "age": "child", "class": "Kokiri", "where": "Dodongo's Cavern (bomb flower platform chest)", "at": [715, 120]},
+      {"n": 3, "sword": "Phantom Sword", "creator": "Fado", "age": "child", "class": "Kokiri", "where": "Kakariko open grotto (rupee chest)", "at": [868, 262]},
+      {"n": 4, "sword": "Master Sword (LttP)", "creator": "Anthus", "age": "adult", "class": "Master", "where": "Forest Temple", "at": [1095, 345], "off": [-34, 6]},
+      {"n": 5, "sword": "Phantom Sword", "creator": "Fado", "age": "adult", "class": "Master", "where": "Death Mountain Trail storms grotto (rupee chest)", "at": [745, 150], "off": [-30, -4]},
+      {"n": 6, "sword": "Razor Sword", "creator": "Reppan", "age": "adult", "class": "Master", "where": "Fire Temple", "at": [810, 28]},
+      {"n": 7, "sword": "Frostblade", "creator": "sitton76", "age": "adult", "class": "Master", "where": "Ice Cavern", "at": [1150, 55]},
+      {"n": 8, "sword": "WindWakerSword", "creator": "acidicloki", "age": "adult", "class": "Master", "where": "Water Temple", "at": [420, 612]},
+      {"n": 9, "sword": "Durandal", "creator": "Jameriquiah", "age": "adult", "class": "Biggoron", "where": "Shadow Temple", "at": [925, 180], "off": [24, 4]},
+      {"n": 10, "sword": "Lokomo Sword", "creator": "Jameriquiah", "age": "adult", "class": "Master", "where": "Spirit Temple", "at": [55, 230]},
+      {"n": 11, "sword": "Golden Claymore", "creator": "sitton76", "age": "adult", "class": "Biggoron", "where": "Gerudo Training Ground", "at": [215, 110], "off": [-36, 4]},
+      {"n": 12, "sword": "Tempered Sword", "creator": "Anthus", "age": "adult", "class": "Master", "where": "Ganon's Castle, Light trial", "at": [565, 85], "off": [-30, 36]},
+      {"n": 13, "sword": "Golden Sword", "creator": "Anthus", "age": "adult", "class": "Master", "where": "Ganon's Castle, Spirit trial", "at": [565, 85], "off": [4, 38]}
+    ]
+  }
+}

@@ -75,6 +75,30 @@ ships, they are downloaded but unused. `dependencies.json` lists which file of e
 | Durandal | adult | [Durandal over Biggoron's Sword](https://gamebanana.com/mods/594055) | Jameriquiah |
 | Golden Claymore | adult | [Golden Claymore over Biggoron's Sword](https://gamebanana.com/mods/442039) | sitton76 |
 
+### Where the swords are (DRAFT)
+
+![Schematic map of Hyrule with a chest for each custom sword](map/hyrule-chests.png)
+
+Each sword waits in a chest. Child chests are brown, adult chests are blue. The placements are a draft until they're
+approved; `map/hyrule.json` holds them, and `python3 map/make_map.py` redraws the map (needs `rsvg-convert` for the
+PNG). The map is drawn in code from simple shapes: it contains no art from the game.
+
+| # | Sword | Creator | Age | Class | Chest |
+|---|---|---|---|---|---|
+| 1 | Longer Kokiri Sword | nickelndime246 | child | Kokiri | Lost Woods grotto (rupee chest) |
+| 2 | Razor Sword | Reppan | child | Kokiri | Dodongo's Cavern (bomb flower platform chest) |
+| 3 | Phantom Sword | Fado | child | Kokiri | Kakariko open grotto (rupee chest) |
+| 4 | Master Sword (LttP) | Anthus | adult | Master | Forest Temple |
+| 5 | Phantom Sword | Fado | adult | Master | Death Mountain Trail storms grotto (rupee chest) |
+| 6 | Razor Sword | Reppan | adult | Master | Fire Temple |
+| 7 | Frostblade | sitton76 | adult | Master | Ice Cavern |
+| 8 | WindWakerSword | acidicloki | adult | Master | Water Temple |
+| 9 | Durandal | Jameriquiah | adult | Biggoron | Shadow Temple |
+| 10 | Lokomo Sword | Jameriquiah | adult | Master | Spirit Temple |
+| 11 | Golden Claymore | sitton76 | adult | Biggoron | Gerudo Training Ground |
+| 12 | Tempered Sword | Anthus | adult | Master | Ganon's Castle, Light trial |
+| 13 | Golden Sword | Anthus | adult | Master | Ganon's Castle, Spirit trial |
+
 ### Optional, not installed automatically
 
 - **PlayStation button icons:** [Xbox + PlayStation Style Controls](https://gamebanana.com/mods/462822) by trevvv.

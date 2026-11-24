@@ -44,6 +44,27 @@ Build plan:
   actor and scene system).
 - All weapons, names and numbers are original. Nothing is copied from other games.
 
+Placement (DRAFT, not approved yet). Source of truth: `map/hyrule.json`, drawn by `map/make_map.py` as
+`map/hyrule-chests.png`. Swords use their creators' names. Chests that hold rupees are swapped first; in a dungeon the
+exact chest is picked when the build gets there, never one that holds a key or an item the route needs.
+The two Biggoron-class swords (Durandal, Golden Claymore) sit late in the adult route so the strongest attack comes last.
+
+| # | Sword | Creator | Age | Class | Chest |
+|---|---|---|---|---|---|
+| 1 | Longer Kokiri Sword | nickelndime246 | child | Kokiri | Lost Woods grotto (rupee chest) |
+| 2 | Razor Sword | Reppan | child | Kokiri | Dodongo's Cavern (bomb flower platform chest) |
+| 3 | Phantom Sword | Fado | child | Kokiri | Kakariko open grotto (rupee chest) |
+| 4 | Master Sword (LttP) | Anthus | adult | Master | Forest Temple |
+| 5 | Phantom Sword | Fado | adult | Master | Death Mountain Trail storms grotto (rupee chest) |
+| 6 | Razor Sword | Reppan | adult | Master | Fire Temple |
+| 7 | Frostblade | sitton76 | adult | Master | Ice Cavern |
+| 8 | WindWakerSword | acidicloki | adult | Master | Water Temple |
+| 9 | Durandal | Jameriquiah | adult | Biggoron | Shadow Temple |
+| 10 | Lokomo Sword | Jameriquiah | adult | Master | Spirit Temple |
+| 11 | Golden Claymore | sitton76 | adult | Biggoron | Gerudo Training Ground |
+| 12 | Tempered Sword | Anthus | adult | Master | Ganon's Castle, Light trial |
+| 13 | Golden Sword | Anthus | adult | Master | Ganon's Castle, Spirit trial |
+
 ## 3b. Difficulty that follows weapon power
 Goal: stronger swords feel stronger, but bosses never collapse in two hits and a weak sword never makes a fight hopeless.
 
