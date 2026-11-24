@@ -25,9 +25,9 @@ extern "C" {
 #include "textures/do_action_static/do_action_static.h"
 #include "soh_assets.h"
 extern void* gItemIcons[];
-extern const char* digitTextures[];
 extern const char* _gAmmoDigit0Tex[];
 }
+#include "soh/ShipUtils.h"
 extern "C" {
 float OTRGetDimensionFromLeftEdge(float v);
 float OTRGetDimensionFromRightEdge(float v);
@@ -194,17 +194,36 @@ static void DrawIcon(PlayState* play, const void* tex, int tw, float x, float y,
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// 4-bit IA do-action word (48 x 16), as OoT draws it.
-static void DrawDoAction(PlayState* play, const char* tex, float x, float y, float sc, int a) {
+// Text in the game's message font (the routine of dialogue and the creator: 16 x 16 I4 characters from
+// Ship_GetCharFontTexture, advance from Ship_GetCharFontWidth), drawn into the overlay with a small drop shadow.
+static const float kFontBase = 0.75f; // the message font's usual character scale (R_TEXT_CHAR_SCALE 75)
+
+static float TextWidth(const char* str, float sc) {
+    float w = 0.0f;
+    for (const char* c = str; *c; c++) {
+        w += Ship_GetCharFontWidth((u8)*c) * kFontBase * sc;
+    }
+    return w;
+}
+
+static void DrawText(PlayState* play, const char* str, float x, float y, float sc, int r, int g, int b, int a) {
+    const float size = 16.0f * kFontBase * sc;
     OPEN_DISPS(play->state.gfxCtx);
     gDPPipeSync(OVERLAY_DISP++);
-    gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0, PRIMITIVE,
-                      ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
-    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, a);
-    gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 0);
-    gDPLoadTextureBlock_4b(OVERLAY_DISP++, tex, G_IM_FMT_IA, 48, 16, 0, G_TX_NOMIRROR | G_TX_CLAMP,
-                           G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
-    RECT(x, y, 48.0f * sc, 16.0f * sc, 0, 0, 1024.0f / sc, 1024.0f / sc);
+    gDPSetCombineLERP(OVERLAY_DISP++, 0, 0, 0, PRIMITIVE, TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, PRIMITIVE, TEXEL0, 0,
+                      PRIMITIVE, 0);
+    for (const char* c = str; *c; c++) {
+        if (*c != ' ') {
+            gDPLoadTextureBlock_4b(OVERLAY_DISP++, Ship_GetCharFontTexture((u8)*c), G_IM_FMT_I, 16, 16, 0,
+                                   G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
+                                   G_TX_NOLOD, G_TX_NOLOD);
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 0, 0, 0, a * 3 / 4); // drop shadow
+            RECT(x + 0.5f, y + 0.5f, size, size, 0, 0, 1024.0f * 16.0f / size, 1024.0f * 16.0f / size);
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, r, g, b, a);
+            RECT(x, y, size, size, 0, 0, 1024.0f * 16.0f / size, 1024.0f * 16.0f / size);
+        }
+        x += Ship_GetCharFontWidth((u8)*c) * kFontBase * sc;
+    }
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -426,7 +445,8 @@ static bool Flashing(PlayState* play, SoulsLoadoutKind kind) {
 
 // One slot, w x h units: a soft dark panel with a darker halo, no border. The flash darkens the panel and adds a soft warm
 // glow inside it. Icon at 84 % of the smaller side, centred; ammo digits in the bottom right corner.
-static void DrawSlot(PlayState* play, float x, float y, float w, float h, uint8_t item, bool dim, bool flash) {
+static void DrawSlot(PlayState* play, float x, float y, float w, float h, uint8_t item, bool dim, bool flash,
+                     bool showAmmo = true) {
     DrawGen(play, sSlotHalo, 56, 64, x - 4.0f, y - 4.0f, w + 8.0f, h + 8.0f, 0, 0, 0, A(255));
     DrawGen(play, sSlotFill, 56, 68, x, y, w, h, 8, 10, 16, A(flash ? 215 : 140));
     if (flash) {
@@ -440,7 +460,7 @@ static void DrawSlot(PlayState* play, float x, float y, float w, float h, uint8_
         int ia = (dim || ammo == 0) ? 115 : 255;
         float is = std::min(w, h) * 0.84f;
         DrawIcon(play, icon, tw, x + (w - is) / 2, y + (h - is) / 2, is, is, 255, 255, 255, A(ia));
-        if (ammo >= 0) {
+        if (ammo >= 0 && showAmmo) {
             const float d = w < 12.0f ? 2.6f : 3.6f;
             char buf[8];
             int n = snprintf(buf, sizeof(buf), "%d", std::min(ammo, 99));
@@ -480,7 +500,7 @@ static void DrawCross(PlayState* play, float left, float bottom, bool testFlash)
     if (SoulsLoadout_PouchHeld()) {
         const float px[4] = { colM, colL, colR, colM }, py[4] = { yTop, ySide, ySide, yBot };
         for (int i = 0; i < 4; i++) {
-            DrawSlot(play, px[i], py[i], sw, sh, SoulsLoadout_Get(SL_POUCH, i), false, Flashing(play, SL_POUCH));
+            DrawSlot(play, px[i], py[i], sw, sh, SoulsLoadout_Get(SL_POUCH, i), false, Flashing(play, SL_POUCH), false);
         }
         return;
     }
@@ -495,10 +515,10 @@ static void DrawCross(PlayState* play, float left, float bottom, bool testFlash)
     sAlpha = saved * 80 / 100;
     uint8_t ns = NextItem(SL_SPELL), nq = NextItem(SL_QUICK);
     if (ns != ITEM_NONE) {
-        DrawSlot(play, px, yTop, pw, ps, ns, !spellOn, false);
+        DrawSlot(play, px, yTop, pw, ps, ns, !spellOn, false, false);
     }
     if (nq != ITEM_NONE) {
-        DrawSlot(play, px, yBot + sh - ps, pw, ps, nq, false, false);
+        DrawSlot(play, px, yBot + sh - ps, pw, ps, nq, false, false, false);
     }
     sAlpha = saved;
 }
@@ -507,7 +527,7 @@ static void DrawCross(PlayState* play, float left, float bottom, bool testFlash)
 // Rupees, quest row, prompt
 
 static void DrawRupees(PlayState* play, float right, float bottom) {
-    static const Color_RGB8 kWallet[4] = { { 0xC8, 0xFF, 0x64 }, { 0x82, 0x82, 0xFF }, { 0xFF, 0x64, 0x64 },
+    static const Color_RGB8 kWallet[4] = { { 90, 235, 70 }, { 0x82, 0x82, 0xFF }, { 0xFF, 0x64, 0x64 },
                                            { 0xFF, 0x5A, 0xFF } };
     Color_RGB8 col = kWallet[0];
     if (CVarGetInteger(CVAR_ENHANCEMENT("DynamicWalletIcon"), 0)) {
@@ -523,35 +543,24 @@ static void DrawRupees(PlayState* play, float right, float bottom) {
         gDPLoadTextureBlock(OVERLAY_DISP++, gRupeeCounterIconTex, G_IM_FMT_IA, G_IM_SIZ_8b, 16, 16, 0,
                             G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
                             G_TX_NOLOD, G_TX_NOLOD);
-        RECT(right - 30.0f, bottom - 10.0f, 8.5f, 8.5f, 0, 0, 1024.0f * 16.0f / 8.5f, 1024.0f * 16.0f / 8.5f);
+        RECT(right - 30.9f, bottom - 10.9f, 10.2f, 10.2f, 0, 0, 1024.0f * 16.0f / 10.2f, 1024.0f * 16.0f / 10.2f);
         CLOSE_DISPS(play->state.gfxCtx);
     }
-    // number: the game's counter digits (I8 8 x 16), right aligned
+    // number: the message font, upright white, right aligned
     int rupees = gSaveContext.rupees;
     if (rupees < 0 || rupees > 9999) {
         rupees = 0;
     }
     char buf[8];
-    int n = snprintf(buf, sizeof(buf), "%d", rupees);
-    const float sc = 0.62f, dw = 8.0f * sc, dh = 16.0f * sc;
+    snprintf(buf, sizeof(buf), "%d", rupees);
+    const float sc = 0.85f;
     int pr = 255, pg = 255, pb = 255;
     if (rupees == CUR_CAPACITY(UPG_WALLET)) {
         pr = 120, pg = 255, pb = 0;
     } else if (rupees == 0) {
-        pr = pg = pb = 100;
+        pr = pg = pb = 160;
     }
-    OPEN_DISPS(play->state.gfxCtx);
-    gDPPipeSync(OVERLAY_DISP++);
-    gDPSetCombineLERP(OVERLAY_DISP++, 0, 0, 0, PRIMITIVE, TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, PRIMITIVE, TEXEL0, 0,
-                      PRIMITIVE, 0);
-    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, pr, pg, pb, A(255));
-    for (int i = 0; i < n; i++) {
-        gDPLoadTextureBlock(OVERLAY_DISP++, digitTextures[buf[i] - '0'], G_IM_FMT_I, G_IM_SIZ_8b, 8, 16, 0,
-                            G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
-                            G_TX_NOLOD, G_TX_NOLOD);
-        RECT(right - 2.0f - (n - i) * dw, bottom - 9.8f, dw, dh, 0, 0, 1024.0f / sc, 1024.0f / sc);
-    }
-    CLOSE_DISPS(play->state.gfxCtx);
+    DrawText(play, buf, right - 2.0f - TextWidth(buf, sc), bottom - 10.6f, sc, pr, pg, pb, A(255));
 }
 
 struct SoulsQuestIcon {
@@ -604,24 +613,26 @@ static void DrawQuestRow(PlayState* play, float right, float top) {
 }
 
 static void DrawPrompt(PlayState* play, const char* word) {
-    const float w = 80.0f, h = 15.0f, x = 160.0f - w / 2, y = 196.0f;
+    const float w = 80.0f, h = 15.0f, x = 160.0f - w / 2, y = 196.0f, sc = 0.93f;
     DrawGen(play, sPromptFill, 128, 24, x, y, w, h, 8, 10, 16, A(158));
     DrawGen(play, sPromptRing, 128, 24, x, y, w, h, 232, 214, 160, A(128));
     DrawGen(play, sTriangle, 32, 32, x + 6.5f, y + 2.5f, 10.0f, 10.0f, 120, 220, 200, A(255));
-    DrawDoAction(play, word, x + 19.0f, y + 1.5f, 0.75f, A(255));
+    DrawText(play, word, x + 20.0f, y + 3.0f, sc, 255, 255, 255, A(255));
 }
 
-// The action word OoT would show for the A button, or nullptr when there is none.
+// The words OoT's A button shows (the do-action labels, in the order of the DO_ACTION_ ids); nullptr = no label.
 static const char* ActionWord(PlayState* play) {
+    static const char* const kWords[] = { "Attack", "Check", "Enter", "Return", "Open", "Jump", "Decide", "Dive",
+                                          "Faster", "Throw", nullptr, "Climb", "Drop", "Down", "Save", "Speak",
+                                          "Next", "Grab", "Stop", "Put Away", "Reel" };
     InterfaceContext* ic = &play->interfaceCtx;
-    if (ic->aAlpha < 40 || ic->doActionSegment == nullptr) {
+    if (ic->aAlpha < 40 || play->pauseCtx.state != 0 || play->pauseCtx.debugState != 0) {
+        return nullptr; // faded out, or the game is paused: no prompt
+    }
+    if (ic->unk_1F0 >= sizeof(kWords) / sizeof(kWords[0])) {
         return nullptr;
     }
-    const char* w = ((ic->unk_1EC < 2) || (ic->unk_1EC == 3)) ? ic->doActionSegment[0] : ic->doActionSegment[1];
-    if (w == nullptr || w[0] == 0 || std::strcmp(w, gEmptyTexture) == 0) {
-        return nullptr;
-    }
-    return w;
+    return kWords[ic->unk_1F0];
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -720,8 +731,8 @@ extern "C" void SoulsHud_Draw(PlayState* play) {
 
     // action prompt near the bottom centre
     const char* word = ActionWord(play);
-    if (mode == 5) {
-        word = gCheckDoActionENGTex;
+    if (mode == 5 && play->pauseCtx.state == 0) {
+        word = "Check";
     }
     if (word != nullptr) {
         DrawPrompt(play, word);
