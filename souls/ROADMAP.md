@@ -13,6 +13,20 @@ Order of work. Each step is prototyped first, then built.
 - Uses OoT's own file-select sprites, message font and the real child/adult Link model for the preview
   (drawn by the game like the pause screen's equipment page).
 - The look (cosmetics, body size, model pack choice) is saved per save file instead of globally.
+  DONE as the data layer: `soh/soh/Enhancements/cosmetics/SoulsLook.cpp` ("soulsLook" save section,
+  `gEnhancements.SoulsPerFileLook`).
+
+Build plan:
+- Entry: `soh/src/overlays/gamestates/ovl_file_choose/z_file_nameset_NES.c`, `FileChoose_StartNameEntryNES`
+  (sets `configMode = CM_NAME_ENTRY` for a new file). Add a creator mode before it (`CM_SOULS_CREATOR`), reached the same
+  way; the Name row opens OoT's own name entry and returns to the creator. An existing file gets "Change look" on its menu.
+- Drawing: reuse the file-select helpers in `z_file_choose.c` (window tiles `gFileSelWindow*`, highlight
+  `gFileSelBigButtonHighlightTex`, name box `gFileSelNameBoxTex`, message font) so it matches the game exactly.
+- Preview: `Player_DrawPauseImpl` (soh/src/code/z_player_lib.c) draws the real Link with sword, tunic, shield and boots
+  as parameters. It takes a PlayState only for `state.gfxCtx` and `view.eye`; add a variant that takes a GraphicsContext and
+  an eye vector, and load the child/adult Link object and a SkelAnime the way `KaleidoScope` does for the equipment page.
+- Values: rows write the same cosmetics settings the Cosmetics Editor uses (`gCosmetics.Link.*`, swords, Navi...),
+  then `ApplyOrResetCustomGfxPatches()`, so the preview and the game always agree; Done saves them with the file.
 
 ## 2. Equipment skins from installed packs
 - At startup, scan the `mods` folder: for each `.o2r`/`.otr`, note which Link equipment models it replaces
