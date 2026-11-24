@@ -71,11 +71,18 @@ static u16 SoulsInput_DpadToC(u16 b) {
     return out;
 }
 
+// The pad buttons before the Souls layout changes them (the Equipment page tells Triangle from Cross with this:
+// in menus both become A).
+extern "C" {
+uint16_t gSoulsRawPadButtons = 0;
+}
+
 extern "C" void SoulsInput_Transform(u16* buttons) {
     if (!CVarGetInteger(CVAR_SOULS_CONTROLS, 0)) {
         return;
     }
     u16 in = *buttons;
+    gSoulsRawPadButtons = in;
     u16 out = in & ~(DPAD_BITS | BTN_L);
 
     if (!SoulsInput_InMenu()) {

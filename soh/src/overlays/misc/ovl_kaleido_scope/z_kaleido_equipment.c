@@ -1,4 +1,5 @@
 #include "z_kaleido_scope.h"
+#include "soh/Enhancements/controls/SoulsEquipPage.h"
 #include "textures/icon_item_static/icon_item_static.h"
 #include "textures/parameter_static/parameter_static.h"
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
@@ -167,6 +168,58 @@ void KaleidoScope_DrawPlayerWork(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Souls of Harkinian: the Link preview of the Equipment page, drawn in screen space (320x240 units) from the frame
+// buffer the pause screen draws him into (the old page draws the same buffer as a quad on its own page).
+void KaleidoScope_DrawPauseLink2D(PlayState* play, s32 x, s32 y, s32 w, s32 h) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_39Opa(play->state.gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetCombineMode(POLY_OPA_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+    gDPSetTextureFilter(POLY_OPA_DISP++, G_TF_BILERP);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, 255);
+    gDPSetTileCustom(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, PAUSE_EQUIP_PLAYER_WIDTH, 32, 0,
+                     G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD,
+                     G_TX_NOLOD);
+    gDPSetTextureImage(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, PAUSE_EQUIP_PLAYER_WIDTH,
+                       pauseCtx->playerSegment);
+    gDPLoadSync(POLY_OPA_DISP++);
+    gDPLoadTile(POLY_OPA_DISP++, G_TX_LOADTILE, 0, 0, (PAUSE_EQUIP_PLAYER_WIDTH - 1) << 2, (32 - 1) << 2);
+    gDPSetTextureImageFB(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, PAUSE_EQUIP_PLAYER_WIDTH,
+                         gPauseLinkFrameBuffer);
+    gSPWideTextureRectangle(POLY_OPA_DISP++, x << 2, y << 2, (x + w) << 2, (y + h) << 2, G_TX_RENDERTILE, 0, 0,
+                            (PAUSE_EQUIP_PLAYER_WIDTH << 10) / w, (32 << 10) / h);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Souls of Harkinian: the Souls Equipment page draws its slots in 2D (SoulsEquipPage_Draw). OoT keeps the page frame
+// and Link; Link goes into the frame buffer here, and is drawn on the old page position only while the page turns.
+static void KaleidoScope_DrawEquipmentSouls(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    KaleidoScope_DrawPlayerWork(play);
+
+    gSPInvalidateTexCache(POLY_OPA_DISP++, pauseCtx->iconItemSegment);
+    gSPInvalidateTexCache(POLY_OPA_DISP++, pauseCtx->nameSegment);
+    gSPSegment(POLY_OPA_DISP++, 0x08, pauseCtx->iconItemSegment);
+    gSPSegment(POLY_OPA_DISP++, 0x09, pauseCtx->iconItem24Segment);
+    gSPSegment(POLY_OPA_DISP++, 0x0A, pauseCtx->nameSegment);
+    gSPSegment(POLY_OPA_DISP++, 0x0B, play->interfaceCtx.mapSegment);
+
+    if (!SoulsEquipPage_Shown(play)) {
+        Gfx_SetupDL_42Opa(play->state.gfxCtx);
+        KaleidoScope_DrawEquipmentImage(play, pauseCtx->playerSegment, PAUSE_EQUIP_PLAYER_WIDTH,
+                                        PAUSE_EQUIP_PLAYER_HEIGHT);
+    }
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 void KaleidoScope_DrawEquipment(PlayState* play) {
     PauseContext* pauseCtx = &play->pauseCtx;
     Input* input = &play->state.input[0];
@@ -185,6 +238,11 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
     s16 cursorX;
     s16 cursorY;
     s16 oldCursorPoint;
+
+    if (SoulsEquipPage_Active()) {
+        KaleidoScope_DrawEquipmentSouls(play);
+        return;
+    }
 
     OPEN_DISPS(play->state.gfxCtx);
 

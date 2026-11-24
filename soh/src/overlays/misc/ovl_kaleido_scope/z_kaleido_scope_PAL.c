@@ -1,4 +1,5 @@
 #include "z_kaleido_scope.h"
+#include "soh/Enhancements/controls/SoulsEquipPage.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -1756,7 +1757,7 @@ void KaleidoScope_DrawPages(PlayState* play, GraphicsContext* gfxCtx) {
 
                 KaleidoScope_DrawEquipment(play);
 
-                if (pauseCtx->cursorSpecialPos == 0) {
+                if (pauseCtx->cursorSpecialPos == 0 && !SoulsEquipPage_Active()) {
                     KaleidoScope_DrawCursor(play, PAUSE_EQUIP);
                 }
                 break;
@@ -3531,6 +3532,9 @@ void KaleidoScope_Draw(PlayState* play) {
         if (!((pauseCtx->state >= 8) && (pauseCtx->state <= 0x11))) {
             KaleidoScope_DrawInfoPanel(play);
         }
+
+        // Souls of Harkinian: the Equipment page of the Elden Ring system, over the pause screen
+        SoulsEquipPage_Draw(play);
     }
 
     if ((pauseCtx->state >= 0xB) && (pauseCtx->state <= 0x11)) {
@@ -3857,7 +3861,9 @@ void KaleidoScope_Update(PlayState* play) {
             pauseCtx->stickRelX = input->rel.stick_x;
             pauseCtx->stickRelY = input->rel.stick_y;
             KaleidoScope_UpdateCursorSize(&play->pauseCtx);
-            KaleidoScope_HandlePageToggles(pauseCtx, input);
+            if (!SoulsEquipPage_BlocksPageTurn(play)) {
+                KaleidoScope_HandlePageToggles(pauseCtx, input);
+            }
         } else if ((pauseCtx->pageIndex == PAUSE_QUEST) && ((pauseCtx->unk_1E4 < 3) || (pauseCtx->unk_1E4 == 5))) {
             KaleidoScope_UpdateCursorSize(&play->pauseCtx);
         }
@@ -3866,6 +3872,9 @@ void KaleidoScope_Update(PlayState* play) {
             KaleidoScope_UpdateNamePanel(play);
         }
     }
+
+    // Souls of Harkinian: the Equipment page takes its input here (before the pause state machine below)
+    SoulsEquipPage_Update(play);
 
     switch (pauseCtx->state) {
         case 3:
@@ -4266,7 +4275,7 @@ void KaleidoScope_Update(PlayState* play) {
                         pauseCtx->state = 0x12;
                         WREG(2) = -6240;
                         func_800F64E0(0);
-                    } else if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+                    } else if (CHECK_BTN_ALL(input->press.button, BTN_B) && !SoulsEquipPage_ConsumesBack(play)) {
                         pauseCtx->mode = 0;
                         pauseCtx->promptChoice = 0;
                         Audio_PlaySfxGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
