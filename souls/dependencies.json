@@ -1,0 +1,14 @@
+{
+  "comment": "Third-party packs used by Souls of Harkinian. They are NOT included in this repository (their licenses do not allow redistribution); install.sh downloads them from GameBanana, the authors' own pages, onto the player's computer. Weapon skins go into the souls-skins folder, not mods, so they never replace the original swords; the Souls build loads them under their own names.",
+  "packs": [
+    {"slug": "deku-splitter", "use": "weapon skin", "weapon": "Deku Splitter", "name": "Longer Kokiri Sword", "author": "nickelndime246", "gamebanana": 664520, "file": 1661150},
+    {"slug": "cinder-edge", "use": "weapon skin", "weapon": "Cinder Edge", "name": "Artwork Accurate LttP Master Sword 2.0", "author": "Anthus", "gamebanana": 703064, "file": 1784848},
+    {"slug": "gale-saber", "use": "weapon skin", "weapon": "Gale Saber", "name": "WindWakerSword", "author": "acidicloki", "gamebanana": 728972, "file": 1853197},
+    {"slug": "rimeedge", "use": "weapon skin", "weapon": "Rimeedge", "name": "Frostblade over Master Sword", "author": "sitton76", "gamebanana": 452111, "file": 1146026},
+    {"slug": "stormbrand", "use": "weapon skin", "weapon": "Stormbrand", "name": "Razor Sword Collection (N64 Swords)", "author": "Reppan", "gamebanana": 597197, "file": 1448772},
+    {"slug": "gravestone", "use": "weapon skin", "weapon": "Gravestone", "name": "Durandal over Biggorons Sword", "author": "Jameriquiah", "gamebanana": 594055, "file": 1595939},
+    {"slug": "sun-scimitar", "use": "weapon skin", "weapon": "Sun Scimitar", "name": "Lokomo Sword", "author": "Jameriquiah", "gamebanana": 691194, "file": 1756379},
+    {"slug": "desert-fang", "use": "weapon skin", "weapon": "Desert Fang", "name": "Golden Claymore over Biggoron's Sword", "author": "sitton76", "gamebanana": 442039, "file": 1146021},
+    {"slug": "sages-brand", "use": "weapon skin", "weapon": "Sage's Brand", "name": "Phantom Sword", "author": "Fado", "gamebanana": 689100, "file": 1738216}
+  ]
+}
