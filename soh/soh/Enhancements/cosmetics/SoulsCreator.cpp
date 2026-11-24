@@ -763,10 +763,13 @@ extern "C" void SoulsCreator_Update(void* state) {
         int old = sOv;
         int col = sOv % kPaletteCols;
         if (sOv == kOriginalSwatch) {
+            // From "Original", every direction leads into the colors (left/right too, so the cursor never seems stuck)
             if (up) {
                 sOv = kPaletteCount - kPaletteCols; // first color of the last row
-            } else if (down) {
+            } else if (down || right) {
                 sOv = 0;
+            } else if (left) {
+                sOv = kPaletteCount - 1;
             }
         } else if (left) {
             sOv = (sOv / kPaletteCols) * kPaletteCols + (col + kPaletteCols - 1) % kPaletteCols;
@@ -940,7 +943,9 @@ extern "C" void SoulsCreator_DrawPreview(void* state) {
     Vec3f at = { 0.0f, (sPreviewAge == LINK_AGE_CHILD) ? 60.0f : 0.0f, 0.0f };
     Vec3f pos = (sPreviewAge == LINK_AGE_CHILD) ? Vec3f{ 0.0f, -185.0f, -80.0f } : Vec3f{ 20.0f, -180.0f, -40.0f };
     Vec3s rot = { 0, sPreviewYaw, 0 };
-    f32 scale = (sPreviewAge == LINK_AGE_CHILD) ? 0.058f : 0.047f;
+    // Body Size shows in the preview: the game scales Link the same way (100 % = the original size)
+    // (base 92 % so the largest size, 140 %, still fits under the top of the screen)
+    f32 scale = ((sPreviewAge == LINK_AGE_CHILD) ? 0.0534f : 0.0432f) * (sSizePct / 100.0f);
     u8 swordAndShield[2] = { (u8)(sPreviewAge == LINK_AGE_CHILD ? PLAYER_SWORD_KOKIRI : PLAYER_SWORD_MASTER),
                              (u8)(sPreviewAge == LINK_AGE_CHILD ? PLAYER_SHIELD_DEKU : PLAYER_SHIELD_HYLIAN) };
     u16 perspNorm;
