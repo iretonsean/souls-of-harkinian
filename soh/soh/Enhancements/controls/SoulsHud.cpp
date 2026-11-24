@@ -476,7 +476,8 @@ static void DrawSlot(PlayState* play, float x, float y, float w, float h, uint8_
         int ia = (dim || ammo == 0) ? 115 : 255;
         float is = std::min(w, h) * 0.84f;
         if (item == SOULS_ITEM_EPONA) {
-            SoulsEpona_DrawIcon(play->state.gfxCtx, 1, x + (w - is) / 2, y + (h - is) / 2, is); // her head, live
+            // a 3D model cannot fade: it shows while the HUD is more than half visible and goes with the cross when it hides
+            if (A(ia) > 128) SoulsEpona_DrawIcon(play->state.gfxCtx, 1, x + (w - is) / 2, y + (h - is) / 2, is); // her head, live
         } else {
             DrawIcon(play, icon, tw, x + (w - is) / 2, y + (h - is) / 2, is, is, 255, 255, 255, A(ia));
         }

@@ -78,7 +78,8 @@ static void DrawHead(PlayState* play, float x, float y, float size) {
     const float wl = OTRGetDimensionFromLeftEdge(0.0f), wr = OTRGetDimensionFromRightEdge(320.0f);
     const float vw = size * 320.0f / (wr - wl), vx = (x - wl) * 320.0f / (wr - wl);
 
-    static Vp viewport;
+    Vp* vpp = (Vp*)Graph_Alloc(gfx, sizeof(Vp)); // one per draw: the display list reads it later
+    Vp& viewport = *vpp;
     static Lights1 lights = gdSPDefLights1(95, 95, 100, 255, 245, 235, 0, 0, 0);
     lights.l[0].l.dir[0] = (s8)(dir.x * 127.0f);
     lights.l[0].l.dir[1] = (s8)(dir.y * 127.0f + 40.0f);
@@ -98,7 +99,7 @@ static void DrawHead(PlayState* play, float x, float y, float size) {
     viewport.vp.vtrans[1] = (s16)((y + size / 2.0f) * 4.0f);
     viewport.vp.vtrans[2] = G_MAXZ / 2;
     viewport.vp.vtrans[3] = 0;
-    gSPViewport(POLY_OPA_DISP++, &viewport);
+    gSPViewport(POLY_OPA_DISP++, vpp);
     guPerspective(perspMtx, &perspNorm, sCam[4], 1.0f, 10.0f, 4000.0f, 1.0f);
     gSPPerspNormalize(POLY_OPA_DISP++, perspNorm);
     gSPMatrix(POLY_OPA_DISP++, perspMtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
