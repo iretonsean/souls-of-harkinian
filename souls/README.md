@@ -5,30 +5,38 @@ Everything is off until you apply the preset or turn on `gEnhancements.SoulsCont
 
 ## What it changes
 
-- **Separate menu and play layouts.** In play, the D-pad is the C buttons (items, Navi, ocarina notes).
-  In menus (pause screen, file select, text boxes), the D-pad moves the cursor, Cross confirms and Circle
-  goes back. To put an item on a C button in the pause screen, hold R1 and press that D-pad direction.
-- **Built-in jump on Cross.** Cross starts Link's own ledge jump (the running jump when he runs forward, the
-  standing jump otherwise). No item is involved and nothing shows on the HUD. One jump until Link lands; no
-  jump while he carries something, swims, climbs or during cutscenes.
-
+- **Elden Ring controls and slots.** Right hand on R1 / R2, left hand (tools or a catalyst for spells) on L1, guard
+  on L2, and the D-pad cycles your right hand, left hand, spell and quick item. You choose what goes in each slot on
+  the new Equipment page. The full design is in [ER-SYSTEM.md](ER-SYSTEM.md).
+- **Elden Ring style HUD.** A stone heart with HP and magic meters, your Spiritual Stones or Medallions top right, the
+  slot cross bottom left and your rupees ("runes") bottom right.
+- **Equipment page.** Slots for each hand, spells, arrows, shield, tunic, boots, up to 8 quick items and a 4-slot
+  pouch. Weapon lists show a compare card before you equip.
+- **Pouch.** Hold Triangle to see it, Triangle + D-pad uses that pouch item at once (ocarina, lens, boots, beans...).
+- **Ocarina on Cross + D-pad.** Cross is the A note and the D-pad plays the C notes. Circle puts the ocarina away.
+- **Epona like Torrent.** Put Epona in your quick items; Square plays her song for you and she comes.
 - **Character creator.** Starting a new Vanilla or Master Quest file opens "Create Character" before the name entry:
   difficulty path, tunic, hair, boots and Navi colors, body size and sword blades, with a live preview of the real child
   and adult Link (L1 switches). Turn it off with `gEnhancements.SoulsCreator = 0`.
-- **Each save file keeps its own look and path** (colors, body size, difficulty), stored in the save.
+- **Each save file keeps its own look and path** (colors, body size, difficulty), stored in the save. An older save
+  gets its slots filled once from what Link has equipped.
 
 ## Layout (PlayStation names)
 
 | Button | Play | Menus |
 |---|---|---|
-| Cross | Jump | Confirm |
-| Circle | Roll; hold to sprint | Back |
-| Triangle | Interact | Confirm |
-| Square | Item (C-left) | Put item on C-left |
-| D-pad | C buttons | Move cursor |
-| R1 / R2 | Sword | R1 + D-pad: put item on that C button |
-| L1 / L3 | Shield | Next page |
-| L2 / R3 | Lock-on | Previous page |
+| R1 | Right hand attack | Back (R1 + D-pad: put an item on that C button) |
+| R2 | Tap: jump attack. Hold: spin attack | Back |
+| L1 | Left hand: aim and fire a tool, or cast the spell with the catalyst | Next page |
+| L2 | Guard with your shield | Previous page |
+| Square | Quick item | |
+| Triangle | Interact (tap). Hold: show the pouch. Triangle + D-pad: use a pouch item | Confirm (Equipment page: remove) |
+| Cross | Jump. On the ocarina: A note | Confirm |
+| Circle | Roll; hold to sprint. On the ocarina: put it away | Back |
+| D-pad | Right: right hand. Left: left hand. Up: spell. Down: quick item. On the ocarina: C notes | Move cursor |
+| R3 | Lock-on | |
+| L3 / Create | First person / Navi | |
+| Touchpad | Show or hide the minimap | |
 | Options | Pause | Close |
 
 ## Install

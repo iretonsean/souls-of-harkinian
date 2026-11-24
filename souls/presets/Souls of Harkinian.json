@@ -180,9 +180,9 @@
                             "ButtonMappingClass": "SDLButtonToButtonMapping",
                             "SDLControllerButton": 10
                         },
-                        "P0-B16384-SDLA5-ADP": {
+                        "P0-B1-SDLA5-ADP": {
                             "AxisDirection": 1,
-                            "Bitmask": 16384,
+                            "Bitmask": 1,
                             "ButtonMappingClass": "SDLAxisDirectionToButtonMapping",
                             "SDLControllerAxis": 5
                         },
@@ -191,26 +191,41 @@
                             "ButtonMappingClass": "SDLButtonToButtonMapping",
                             "SDLControllerButton": 9
                         },
-                        "P0-B16-SDLB7": {
-                            "Bitmask": 16,
+                        "P0-B4-SDLA4-ADP": {
+                            "AxisDirection": 1,
+                            "Bitmask": 4,
+                            "ButtonMappingClass": "SDLAxisDirectionToButtonMapping",
+                            "SDLControllerAxis": 4
+                        },
+                        "P0-B2-SDLB2": {
+                            "Bitmask": 2,
+                            "ButtonMappingClass": "SDLButtonToButtonMapping",
+                            "SDLControllerButton": 2
+                        },
+                        "P0-B8-SDLB7": {
+                            "Bitmask": 8,
                             "ButtonMappingClass": "SDLButtonToButtonMapping",
                             "SDLControllerButton": 7
                         },
-                        "P0-B32-SDLB0": {
-                            "Bitmask": 32,
+                        "P0-B8-SDLB4": {
+                            "Bitmask": 8,
                             "ButtonMappingClass": "SDLButtonToButtonMapping",
-                            "SDLControllerButton": 0
-                        },
-                        "P0-B8192-SDLA4-ADP": {
-                            "AxisDirection": 1,
-                            "Bitmask": 8192,
-                            "ButtonMappingClass": "SDLAxisDirectionToButtonMapping",
-                            "SDLControllerAxis": 4
+                            "SDLControllerButton": 4
                         },
                         "P0-B8192-SDLB8": {
                             "Bitmask": 8192,
                             "ButtonMappingClass": "SDLButtonToButtonMapping",
                             "SDLControllerButton": 8
+                        },
+                        "P0-B32-SDLB20": {
+                            "Bitmask": 32,
+                            "ButtonMappingClass": "SDLButtonToButtonMapping",
+                            "SDLControllerButton": 20
+                        },
+                        "P0-B32-SDLB5": {
+                            "Bitmask": 32,
+                            "ButtonMappingClass": "SDLButtonToButtonMapping",
+                            "SDLControllerButton": 5
                         },
                         "P0-B4096-SDLB6": {
                             "Bitmask": 4096,
@@ -237,34 +252,35 @@
                             "ButtonMappingClass": "SDLButtonToButtonMapping",
                             "SDLControllerButton": 14
                         },
-                        "P0-B2-SDLB2": {
-                            "Bitmask": 2,
-                            "ButtonMappingClass": "SDLButtonToButtonMapping",
-                            "SDLControllerButton": 2
-                        },
                         "P0-B64-SDLB1": {
                             "Bitmask": 64,
                             "ButtonMappingClass": "SDLButtonToButtonMapping",
                             "SDLControllerButton": 1
+                        },
+                        "P0-B128-SDLB0": {
+                            "Bitmask": 128,
+                            "ButtonMappingClass": "SDLButtonToButtonMapping",
+                            "SDLControllerButton": 0
                         }
                     },
                     "Port1": {
                         "Buttons": {
                             "1024ButtonMappingIds": "P0-B1024-KB34,P0-B1024-SDLB12,",
-                            "16384ButtonMappingIds": "P0-B16384-KB46,P0-B16384-SDLB10,P0-B16384-SDLA5-ADP,",
-                            "16ButtonMappingIds": "P0-B16-KB19,P0-B16-SDLB9,P0-B16-SDLB7,",
-                            "1ButtonMappingIds": "P0-B1-KB333,",
+                            "16384ButtonMappingIds": "P0-B16384-KB46,P0-B16384-SDLB10,",
+                            "16ButtonMappingIds": "P0-B16-KB19,P0-B16-SDLB9,",
+                            "1ButtonMappingIds": "P0-B1-KB333,P0-B1-SDLA5-ADP,",
                             "2048ButtonMappingIds": "P0-B2048-KB20,P0-B2048-SDLB11,",
                             "256ButtonMappingIds": "P0-B256-KB35,P0-B256-SDLB14,",
                             "2ButtonMappingIds": "P0-B2-KB331,P0-B2-SDLB2,",
                             "32768ButtonMappingIds": "P0-B32768-KB45,P0-B32768-SDLB3,P0-B32768-SDLB1,",
-                            "32ButtonMappingIds": "P0-B32-KB18,P0-B32-SDLB0,",
+                            "32ButtonMappingIds": "P0-B32-KB18,P0-B32-SDLB20,P0-B32-SDLB5,",
                             "4096ButtonMappingIds": "P0-B4096-KB57,P0-B4096-SDLB6,",
-                            "4ButtonMappingIds": "P0-B4-KB336,",
+                            "4ButtonMappingIds": "P0-B4-KB336,P0-B4-SDLA4-ADP,",
                             "512ButtonMappingIds": "P0-B512-KB33,P0-B512-SDLB13,",
                             "64ButtonMappingIds": "P0-B64-SDLB1,",
-                            "8192ButtonMappingIds": "P0-B8192-KB44,P0-B8192-SDLA4-ADP,P0-B8192-SDLB8,",
-                            "8ButtonMappingIds": "P0-B8-KB328,"
+                            "8192ButtonMappingIds": "P0-B8192-KB44,P0-B8192-SDLB8,",
+                            "8ButtonMappingIds": "P0-B8-KB328,P0-B8-SDLB7,P0-B8-SDLB4,",
+                            "128ButtonMappingIds": "P0-B128-SDLB0,"
                         },
                         "HasConfig": 1,
                         "LeftStick": {
@@ -298,6 +314,9 @@
                 "Controls": {
                     "RightStickAim": 1
                 },
+                "DPadOnPause": 1,
+                "DpadHoldChange": 1,
+                "DpadInText": 1,
                 "FreeLook": {
                     "CameraSensitivity": {
                         "X": 1.5,
@@ -309,10 +328,7 @@
                 },
                 "InterpolationFPS": 60,
                 "OverlayFont": "Press Start 2P",
-                "VsyncEnabled": 1,
-                "DPadOnPause": 1,
-                "DpadInText": 1,
-                "DpadHoldChange": 1
+                "VsyncEnabled": 1
             }
         },
         "enhancements": {
@@ -330,15 +346,15 @@
                 "ImprovedRollSteering": 1,
                 "MweepSpeed": 2.0399999618530273,
                 "SkipText": 1,
+                "SoulsControls": 1,
+                "SoulsCreator": 1,
+                "SoulsPerFileLook": 1,
                 "SwordToggle": 0,
                 "TextSpeed": 5,
                 "TimeSavers": {
                     "SkipOwlInteractions": 1
                 },
-                "UnsheatheWithoutSlashing": 1,
-                "SoulsControls": 1,
-                "SoulsPerFileLook": 1,
-                "SoulsCreator": 1
+                "UnsheatheWithoutSlashing": 1
             },
             "gCheats": {
                 "MoonJumpOnL": 0,

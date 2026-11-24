@@ -11,21 +11,25 @@ import copy, json, sys
 # N64 button bits
 A, B, Z, START = 0x8000, 0x4000, 0x2000, 0x1000
 DUP, DDOWN, DLEFT, DRIGHT = 0x0800, 0x0400, 0x0200, 0x0100
-MOD1, L, R = 0x0040, 0x0020, 0x0010
+MOD2, MOD1, L, R = 0x0080, 0x0040, 0x0020, 0x0010
 CUP, CDOWN, CLEFT, CRIGHT = 0x0008, 0x0004, 0x0002, 0x0001
-# SDL game controller buttons: 0 Cross, 1 Circle, 2 Square, 3 Triangle, 6 Options, 7 L3, 8 R3, 9 L1, 10 R1,
-# 11-14 D-pad up/down/left/right; axes 4+ = L2, 5+ = R2
+# SDL game controller buttons: 0 Cross, 1 Circle, 2 Square, 3 Triangle, 4 Create, 5 PS, 6 Options, 7 L3, 8 R3, 9 L1,
+# 10 R1, 11-14 D-pad up/down/left/right, 20 touchpad; axes 4+ = L2, 5+ = R2.
+# Elden Ring layout (souls/ER-SYSTEM.md): SoulsInput.cpp turns these N64 buttons into the play and menu actions.
 LAYOUT = {
-    A: [("b", 3), ("b", 1)],      # Triangle interact, Circle roll (Circle = back in menus)
-    B: [("b", 10), ("a", 5, 1)],  # R1 / R2 sword
-    R: [("b", 9), ("b", 7)],      # L1 shield, L3 shield crouch
-    L: [("b", 0)],                # Cross: jump in play, confirm in menus
-    Z: [("a", 4, 1), ("b", 8)],   # L2 / R3 lock-on
+    A: [("b", 3), ("b", 1)],      # Triangle interact / pouch; Circle (with Modifier 1) roll, back in menus
+    B: [("b", 10)],               # R1 right hand
+    CRIGHT: [("a", 5, 1)],        # R2 right hand strong attack (tap = jump attack, hold = spin)
+    R: [("b", 9)],                # L1 left hand (tools, catalyst)
+    CDOWN: [("a", 4, 1)],         # L2 guard
+    CLEFT: [("b", 2)],            # Square quick item
+    CUP: [("b", 7), ("b", 4)],    # L3 / Create: first person, Navi
+    Z: [("b", 8)],                # R3 lock-on
+    L: [("b", 20), ("b", 5)],     # touchpad (PS button too): minimap
     START: [("b", 6)],            # Options
-    DUP: [("b", 11)], DDOWN: [("b", 12)], DLEFT: [("b", 13)], DRIGHT: [("b", 14)],  # C buttons in play, cursor in menus
-    CLEFT: [("b", 2)],            # Square item
-    CUP: [], CDOWN: [], CRIGHT: [],
-    MOD1: [("b", 1)],             # Circle held = sprint (speed modifier)
+    DUP: [("b", 11)], DDOWN: [("b", 12)], DLEFT: [("b", 13)], DRIGHT: [("b", 14)],  # cycle slots; cursor in menus
+    MOD1: [("b", 1)],             # Circle
+    MOD2: [("b", 0)],             # Cross: jump in play, confirm in menus, A note on the ocarina
 }
 
 def apply_layout(ctrl):
