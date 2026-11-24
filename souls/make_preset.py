@@ -62,6 +62,7 @@ def main(src, out):
     enh = copy.deepcopy(cv.get("gEnhancements", {}))
     enh["SoulsControls"] = 1
     enh["SoulsPerFileLook"] = 1  # each save file keeps its own look
+    enh["SoulsCreator"] = 1  # character creator before the name entry of a new file
     enh["DpadEquips"] = 0  # the D-pad is the C buttons in play
     cheats = copy.deepcopy(cv.get("gCheats", {}))
     cheats["MoonJumpOnL"] = 0  # Cross is the built-in jump

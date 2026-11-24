@@ -21,6 +21,9 @@ void ApplyOrResetCustomGfxPatches(bool manualChange);
 static const char* sLookGroups[] = { "Link",     "Swords", "Gloves", "MirrorShield", "Equipment",
                                      "Navi",     "Trails", "SpinAttack" };
 
+// The difficulty path (set by the character creator) is kept with the file too
+static const char* sPathSettings[] = { "SoulsPath", "DamageMult", "HyperBosses", "HyperEnemies", "NoHeartDrops" };
+
 static nlohmann::json SoulsLook_Current() {
     nlohmann::json look = nlohmann::json::object();
     auto all = Ship::Context::GetRawInstance()->GetConfig()->GetNestedJson();
@@ -41,12 +44,28 @@ static void SoulsLook_Save(const SaveContext& saveContext, int sectionID, bool f
         return;
     }
     SaveManager::Instance->SaveData("look", SoulsLook_Current().dump());
+    nlohmann::json path = nlohmann::json::object();
+    for (const char* name : sPathSettings) {
+        path[name] = CVarGetInteger((std::string(CVAR_PREFIX_ENHANCEMENT) + "." + name).c_str(), 0);
+    }
+    SaveManager::Instance->SaveData("path", path.dump());
 }
 
 static void SoulsLook_Load() {
     if (!CVarGetInteger(CVAR_SOULS_PER_FILE_LOOK, 0)) {
         return;
     }
+    std::string pathText;
+    SaveManager::Instance->LoadData("path", pathText, std::string());
+    nlohmann::json path = nlohmann::json::parse(pathText.empty() ? "{}" : pathText, nullptr, false);
+    if (!path.is_discarded() && path.is_object()) {
+        for (const char* name : sPathSettings) {
+            if (path.contains(name) && path[name].is_number_integer()) {
+                CVarSetInteger((std::string(CVAR_PREFIX_ENHANCEMENT) + "." + name).c_str(), path[name].get<int>());
+            }
+        }
+    }
+
     std::string text;
     SaveManager::Instance->LoadData("look", text, std::string());
     if (text.empty()) {

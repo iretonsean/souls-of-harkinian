@@ -12,6 +12,7 @@
 #include "textures/message_static/message_static.h"
 #include "soh/frame_interpolation.h"
 #include <soh/GameVersions.h>
+#include "soh/Enhancements/cosmetics/SoulsCreator.h"
 #include "objects/object_mag/object_mag.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh_assets.h"
@@ -759,7 +760,9 @@ void FileChoose_StartBossRushMenu(GameState* thisx) {
 
 void FileChoose_StartSettings(GameState* thisx) {
     FileChooseContext* this = (FileChooseContext*)thisx;
-    if (!IS_SPEEDRUN) {
+    if (SoulsCreator_IsActive()) {
+        FileChoose_StartListMenu(this, SoulsCreator_UIAlpha(), SoulsCreator_ArrowOffset(), CM_SETTINGS_MENU);
+    } else if (!IS_SPEEDRUN) {
         FileChoose_StartListMenu(this, &this->randomizerUIAlpha, &this->randomizerArrowOffset, CM_SETTINGS_MENU);
     } else if (FileChoose_StartListMenu(this, &this->speedrunUIAlpha, &this->speedrunArrowOffset, CM_SETTINGS_MENU)) {
         Speedrun_LoadPresetChoices(this);
@@ -780,6 +783,7 @@ void FileChoose_StartNameEntryFromMenu(FileChooseContext* this) {
 void FileChoose_UpdateQuestMenu(GameState* thisx) {
     FileChoose_UpdateStickDirectionPromptAnim(thisx);
     FileChooseContext* this = (FileChooseContext*)thisx;
+    SoulsCreator_End(); // back on the quest menu: the settings slot belongs to the randomizer / speedrun menus again
     Input* input = &this->state.input[0];
     s8 i = 0;
     bool dpad = CVarGetInteger(CVAR_SETTING("DpadInText"), 0);
@@ -824,6 +828,14 @@ void FileChoose_UpdateQuestMenu(GameState* thisx) {
         } else if (IS_RANDO || IS_SPEEDRUN) {
             Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                  &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            this->prevConfigMode = this->configMode;
+            this->configMode = CM_ROTATE_TO_SETTINGS_MENU;
+            return;
+        } else if (SoulsCreator_IsEnabled()) {
+            // Souls of Harkinian: character creator before the name entry (uses the settings menu slot)
+            Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                 &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            SoulsCreator_Begin();
             this->prevConfigMode = this->configMode;
             this->configMode = CM_ROTATE_TO_SETTINGS_MENU;
             return;
@@ -889,7 +901,9 @@ void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
 }
 
 void FileChoose_UpdateSettings(GameState* thisx) {
-    if (IS_SPEEDRUN) {
+    if (SoulsCreator_IsActive()) {
+        SoulsCreator_Update(thisx);
+    } else if (IS_SPEEDRUN) {
         FileChoose_UpdateSpeedrunMenu(thisx);
     } else {
         FileChoose_UpdateRandomizerMenu(thisx);
@@ -2022,6 +2036,8 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
         }
     } else if (this->configMode == CM_BOSS_RUSH_MENU) {
         FileChoose_DrawBossRushMenuWindowContents(this);
+    } else if (this->configMode == CM_SETTINGS_MENU && SoulsCreator_IsActive()) {
+        SoulsCreator_Draw(this);
     } else if (this->configMode == CM_SETTINGS_MENU && IS_SPEEDRUN) {
         FileChoose_DrawSpeedrunMenuWindowContents(this);
     } else if (this->configMode == CM_SETTINGS_MENU) {

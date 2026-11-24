@@ -337,7 +337,8 @@
                 },
                 "UnsheatheWithoutSlashing": 1,
                 "SoulsControls": 1,
-                "SoulsPerFileLook": 1
+                "SoulsPerFileLook": 1,
+                "SoulsCreator": 1
             },
             "gCheats": {
                 "MoonJumpOnL": 0,
