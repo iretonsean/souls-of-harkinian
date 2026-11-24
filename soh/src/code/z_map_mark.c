@@ -5,6 +5,7 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/savestate_serialize.h"
+#include "soh/Enhancements/controls/SoulsHud.h"
 
 typedef struct {
     /* 0x00 */ void* texture;
@@ -135,6 +136,13 @@ void MapMark_DrawForDungeon(PlayState* play) {
         } else {
             X_Margins_Minimap_ic = 0;
             Y_Margins_Minimap_ic = 0;
+        }
+        {
+            // Souls HUD: the dungeon map sits above the rupee band (same origin as the map in z_map_exp.c)
+            int soulsDx, soulsDy;
+            SoulsHud_MinimapShift(204, 140, 96, 85, &soulsDx, &soulsDy);
+            X_Margins_Minimap_ic += soulsDx;
+            Y_Margins_Minimap_ic += soulsDy;
         }
 
         markPoint = &mapMarkIconData->points[0];

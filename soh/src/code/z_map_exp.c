@@ -8,6 +8,7 @@
 #include <libultraship/bridge/resourcebridge.h>
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
+#include "soh/Enhancements/controls/SoulsHud.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/savestate_serialize.h"
 #include <libultraship/bridge/consolevariablebridge.h>
@@ -612,6 +613,25 @@ void Map_Init(PlayState* play) {
     }
 }
 
+// Souls HUD: shift of the minimap (in N64 units, + = right / down) so it sits above the rupee band
+static void Minimap_SoulsShift(PlayState* play, s16* xMargin, s16* yMargin) {
+    int ox, oy, w, h, dx, dy;
+    if (play->sceneNum >= SCENE_HYRULE_FIELD && play->sceneNum <= SCENE_OUTSIDE_GANONS_CASTLE) {
+        ox = R_OW_MINIMAP_X;
+        oy = R_OW_MINIMAP_Y;
+        w = gMapData->owMinimapWidth[R_MAP_INDEX];
+        h = gMapData->owMinimapHeight[R_MAP_INDEX];
+    } else {
+        ox = R_DGN_MINIMAP_X;
+        oy = R_DGN_MINIMAP_Y;
+        w = 96;
+        h = 85;
+    }
+    SoulsHud_MinimapShift(ox, oy, w, h, &dx, &dy);
+    *xMargin += dx;
+    *yMargin += dy;
+}
+
 void Minimap_DrawCompassIcons(PlayState* play) {
     s32 pad;
     Player* player = GET_PLAYER(play);
@@ -635,6 +655,7 @@ void Minimap_DrawCompassIcons(PlayState* play) {
         X_Margins_Minimap = 0;
         Y_Margins_Minimap = 0;
     }
+    Minimap_SoulsShift(play, &X_Margins_Minimap, &Y_Margins_Minimap);
 
     OPEN_DISPS(play->state.gfxCtx);
 
@@ -806,6 +827,7 @@ void Minimap_Draw(PlayState* play) {
             X_Margins_Minimap = 0;
             Y_Margins_Minimap = 0;
         }
+        Minimap_SoulsShift(play, &X_Margins_Minimap, &Y_Margins_Minimap);
 
         switch (play->sceneNum) {
             case SCENE_DEKU_TREE:
