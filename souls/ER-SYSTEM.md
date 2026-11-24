@@ -11,8 +11,8 @@ exists. No text on the play HUD.
 | Button | Action |
 |---|---|
 | R1 / R2 | Right-hand armament: attack / strong attack (OoT jump attack). Hold R2 = charged spin attack |
-| L1 | Left-hand armament: shield = guard. Slingshot, Bow, Hookshot, Longshot, Boomerang = hold to aim, release to fire. Catalyst = cast the current spell |
-| L2 | Skill: spin attack |
+| L1 | Left-hand item: Slingshot, Bow, Hookshot, Longshot, Boomerang = hold to aim, release to fire. Catalyst = cast the current spell |
+| L2 | Guard with the equipped shield (OoT's R). Always available, as in OoT; not with a two-handed sword |
 | D-pad right / left | Switch right / left hand to its next filled slot |
 | D-pad up | Switch the current spell |
 | D-pad down | Switch the current quick item |
@@ -33,17 +33,18 @@ The A, B and C buttons are no longer used for items in play. Menus keep the exis
 | Kind | Slots | Items |
 |---|---|---|
 | Right hand | 3 | Kokiri Sword, Master Sword, Giant's Knife, Biggoron Sword, Broken Knife, Megaton Hammer, Deku Stick (later: the 13 pack swords) |
-| Left hand | 3 | Deku / Hylian / Mirror Shield, Fairy Slingshot, Fairy Bow, Hookshot, Longshot, Boomerang, catalyst ("Fairy Magic") |
+| Left hand | 3 | Fairy Slingshot, Fairy Bow, Hookshot, Longshot, Boomerang, catalyst ("Fairy Magic") |
 | Spells | 3 | Din's Fire, Farore's Wind, Nayru's Love. Cast only while the catalyst is the current item of a hand |
 | Arrows | 2 | Fire, Ice, Light Arrows (used by the bow) |
-| Tunic / Boots | 1 each | OoT's equipment, chosen on the Equipment page |
+| Shield / Tunic / Boots | 1 each | OoT's equipment, chosen on the Equipment page (the shield is always on Link's arm, guarded with L2) |
 | Quick items | 8 | Consumables: Deku Nuts, Bombs, Bombchus, every bottle content, Empty Bottle, plus Epona |
 | Pouch | 4 | Tools: both ocarinas, Lens of Truth, Iron / Hover Boots (toggle), Magic Beans, all masks, all trade items |
 
 - Lists only offer items the player owns and can use at the current age (game logic decides).
 - An item can sit in one slot of its kind only.
 - A two-handed weapon (Giant's Knife, Biggoron Sword) in the right hand puts the shield on the back, as in OoT.
-- Old saves: on the first load, the slots are filled once from what the player has equipped (sword, shield, C items), so
+- Old saves: on the first load, the slots are filled once from what the player has equipped (sword, C items; the shield
+  stays the equipped shield), so
   nobody starts unarmed. After that only the player changes them.
 
 ## 3. HUD (phase 1)
@@ -76,13 +77,13 @@ All positions in N64 screen units, anchored to the screen edges with one margin 
 
 Replaces OoT's equipment subscreen in the pause menu. Elden Ring layout, OoT look.
 
-- Rows: Armaments (right hand 1-3, left hand 1-3), Magic & Gear (spells 1-3, arrows 1-2, tunic, boots), Quick Items 1-8,
+- Rows: Armaments (right hand 1-3, left hand 1-3), Magic & Gear (spells 1-3, arrows 1-2, shield, tunic, boots), Quick Items 1-8,
   Pouch 1-4. Right panel: Link and his status.
 - Selected slot: steady gold frame with a glow (no pulsing).
 - Cross on a slot opens the list of that kind: "pick up to N". Equipped items show a gold fill and their slot number;
   a counter "n / N" turns red when full; when full, the rest are dimmed and Cross on them is refused (red flash,
   "All N slots are full. Remove one first."). Cross on an equipped item removes it. A new item goes into the opened slot
-  if it is empty, else the first free slot. Tunic and boots are choose-one. Triangle on a slot empties it; Circle = done.
+  if it is empty, else the first free slot. Shield, tunic and boots are choose-one. Triangle on a slot empties it; Circle = done.
 - Weapons show the souls-style compare card: every stat as equipped value > new value, green when better, red when
   worse; the first column's header is the equipped weapon's name.
 
