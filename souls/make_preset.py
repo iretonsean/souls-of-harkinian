@@ -61,6 +61,7 @@ def main(src, out):
     apply_layout(settings.setdefault("Controllers", {}))
     enh = copy.deepcopy(cv.get("gEnhancements", {}))
     enh["SoulsControls"] = 1
+    enh["SoulsPerFileLook"] = 1  # each save file keeps its own look
     enh["DpadEquips"] = 0  # the D-pad is the C buttons in play
     cheats = copy.deepcopy(cv.get("gCheats", {}))
     cheats["MoonJumpOnL"] = 0  # Cross is the built-in jump
