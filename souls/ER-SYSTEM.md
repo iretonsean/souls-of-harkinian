@@ -95,3 +95,14 @@ Replaces OoT's equipment subscreen in the pause menu. Elden Ring layout, OoT loo
 - Epona: a quick item once Epona and her song are obtained. Square plays Epona's Song for the player (the song's notes
   appear on the staff) and she arrives as usual. No text. Her slot icon is her head, drawn live from her 3D model, the way
   the character creator draws Link.
+
+Built (phase 3) notes:
+- Pouch slot positions: up = pouch 1, left = 2, right = 3, down = 4 (the slots the HUD shows while Triangle is held).
+  Triangle still fires A on press; the first pouch D-pad press of a hold ends the A press. A pouch item is pressed on C-left
+  for three game frames (the game's own item code runs); a lens, mask or held item stays on a free C button while in use,
+  because the game drops it when it is on no C button. Iron and Hover boots toggle directly.
+- Ocarina out: Cross = A, D-pad = C notes, Circle = B. Triangle does nothing (it is often still held from the pouch press).
+  Buttons still held when the ocarina came out are not notes until released.
+- Epona: Square takes the ocarina out and presses C-up, C-left, C-right twice; Circle or R1 cancels. Her icon is drawn live
+  from her skin model (SoulsEpona.cpp) over the icon box, with no depth buffer.
+

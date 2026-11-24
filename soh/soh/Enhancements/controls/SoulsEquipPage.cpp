@@ -17,6 +17,7 @@
 #include <vector>
 #include "soh/Enhancements/controls/SoulsEquipPage.h"
 #include "soh/Enhancements/controls/SoulsLoadout.h"
+#include "soh/Enhancements/controls/SoulsEpona.h"
 #include "soh/ShipUtils.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/frame_interpolation.h"
@@ -752,10 +753,12 @@ static void Icon(GraphicsContext* gfx, uint8_t id, float fx, float fy, float fsi
         case SOULS_ITEM_TOGGLE_HOVER:
             tex = gItemIcons[ITEM_BOOTS_HOVER];
             break;
-        case SOULS_ITEM_EPONA:
-            tex = gCarrotIconTex;
-            dim = 16;
-            break;
+        case SOULS_ITEM_EPONA: {
+            // her head, drawn live from her model (SoulsEpona.cpp)
+            sFillOk = false;
+            SoulsEpona_DrawIcon(gfx, 0, LX(fx), LY(fy), fsize * sSc);
+            return;
+        }
         default:
             if (id < 158) {
                 tex = gItemIcons[id];

@@ -4,6 +4,7 @@
 // rounded frames, a soft band and a triangle mark, built in memory at run time (no image files).
 #include "soh/Enhancements/controls/SoulsHud.h"
 #include "soh/Enhancements/controls/SoulsLoadout.h"
+#include "soh/Enhancements/controls/SoulsEpona.h"
 
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <algorithm>
@@ -474,7 +475,11 @@ static void DrawSlot(PlayState* play, float x, float y, float w, float h, uint8_
         int ammo = AmmoFor(item, &full);
         int ia = (dim || ammo == 0) ? 115 : 255;
         float is = std::min(w, h) * 0.84f;
-        DrawIcon(play, icon, tw, x + (w - is) / 2, y + (h - is) / 2, is, is, 255, 255, 255, A(ia));
+        if (item == SOULS_ITEM_EPONA) {
+            SoulsEpona_DrawIcon(play->state.gfxCtx, 1, x + (w - is) / 2, y + (h - is) / 2, is); // her head, live
+        } else {
+            DrawIcon(play, icon, tw, x + (w - is) / 2, y + (h - is) / 2, is, is, 255, 255, 255, A(ia));
+        }
         if (ammo >= 0 && showAmmo) {
             const float d = w < 12.0f ? 2.6f : 3.6f;
             char buf[8];
