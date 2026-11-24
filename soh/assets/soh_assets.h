@@ -422,6 +422,9 @@ static const ALIGN_ASSET(2) char gFileSelPleaseChooseAQuestJPNTex[] = dgFileSelP
 #define dgFileSelBossRushSettingsENGTex "__OTR__textures/title_static/gFileSelBossRushSettingsENGTex"
 static const ALIGN_ASSET(2) char gFileSelBossRushSettingsENGText[] = dgFileSelBossRushSettingsENGTex;
 
+#define dgFileSelSoulsCreatorENGTex "__OTR__textures/title_static/gFileSelSoulsCreatorENGTex"
+static const ALIGN_ASSET(2) char gFileSelSoulsCreatorENGTex[] = dgFileSelSoulsCreatorENGTex;
+
 #define dgFileSelBossRushSettingsFRATex "__OTR__textures/title_static/gFileSelBossRushSettingsFRATex"
 static const ALIGN_ASSET(2) char gFileSelBossRushSettingsFRAText[] = dgFileSelBossRushSettingsFRATex;
 
