@@ -33,7 +33,7 @@ static u32 sTickFrame = 0xFFFFFFFF;
 
 // Camera: limb that holds the head, view yaw from the front of the horse (degrees), pitch, distance, field of view,
 // and the look-at point's offset from the head limb (game units).
-static float sCam[8] = { 13.0f, 45.0f, 6.0f, 40.0f, 35.0f, 0.0f, -5.0f, 4.0f };
+static float sCam[8] = { 13.0f, 45.0f, 6.0f, 50.0f, 35.0f, 0.0f, -5.0f, 4.0f };
 
 static s32 HeadOverride(Actor* thisx, PlayState* play, s32 limbIndex, Skin* skin) {
     (void)thisx;
