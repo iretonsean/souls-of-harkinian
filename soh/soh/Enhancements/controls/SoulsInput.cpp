@@ -20,9 +20,12 @@
 // with a sword; it works without a target); holding R2 acts as R1 (swing, then the spin charge).
 // L1 presses the left-hand item (C-down: tool or spell). L2 guards with the equipped shield (the game's R button;
 // the shield is gear on the Equipment page, not a slot). D-pad right / left / up / down switch the
-// right hand / left hand / spell / quick item. Triangle is A; while it is held the pouch shows and the D-pad does not
-// switch. The touchpad is L (the game's minimap toggle), the only button that sends L in play. L3 and Create are C-up (first person, Navi), R3 is Z (lock-on).
+// right hand / left hand / spell / quick item. Triangle is A (it fires on press, as before, so talking, opening and
+// grabbing keep their timing); while it is held the pouch shows and the D-pad uses a pouch slot instead of switching
+// (up, left, right, down = pouch 1-4). A pouch use ends the A press, so a pouch item never also holds A. The touchpad is L (the game's minimap toggle), the only button that sends L in play. L3 and Create are C-up (first person, Navi), R3 is Z (lock-on).
 // The pause screen and text boxes keep the older layout: R2 = B, L1 and L3 = R, L2 and R3 = Z.
+// The ocarina (playing mode): Cross = A note, D-pad = C-up / C-down / C-left / C-right notes, Circle = B (puts it away).
+// Square with Epona as the quick item takes the ocarina out and presses her song's notes for the player (EponaTick).
 //
 // Cross jumps. The jump is the game's own ledge jump (the running jump when Link runs forward, the standing jump
 // otherwise, his normal jump voice), started from the item-button check, so the game's rules apply (no jump while
@@ -52,6 +55,7 @@ extern u8 gItemSlots[];
 void Interface_LoadItemIcon1(PlayState* play, u16 button);
 void Player_UseItem(PlayState* play, Player* player, s32 item);
 int Player_CanUpdateItems(Player* player);
+s8 Player_ItemToItemAction(s32 item);
 void func_8083BA90(PlayState* play, Player* player, s32 arg2, f32 xzVelocity, f32 yVelocity); // start a jump slash
 }
 
@@ -77,8 +81,8 @@ static bool SoulsInput_InMenu() {
     if (mode == MSGMODE_NONE) {
         return false;
     }
-    // The ocarina (playing, songs, scarecrow) uses the C buttons: treat it as play.
-    if (mode >= MSGMODE_OCARINA_STARTING && mode <= MSGMODE_SCARECROW_LONG_RECORDING_START) {
+    // The ocarina (playing, songs, scarecrow, memory game, frogs) uses the C buttons: treat it as play.
+    if (mode >= MSGMODE_OCARINA_STARTING && mode <= MSGMODE_FROGS_WAITING) {
         return false;
     }
     return true;
@@ -101,7 +105,7 @@ static bool SoulsInput_InOcarina() {
         return false;
     }
     u8 mode = gPlayState->msgCtx.msgMode;
-    return mode >= MSGMODE_OCARINA_STARTING && mode <= MSGMODE_SCARECROW_LONG_RECORDING_START;
+    return mode >= MSGMODE_OCARINA_STARTING && mode <= MSGMODE_FROGS_WAITING;
 }
 
 static bool IsSword(u8 item) {
@@ -130,6 +134,31 @@ static bool sForceAttack = false; // press the right-hand attack for a few game 
 static u32 sForceAttackFrame = 0;
 static const int kR2HoldMs = 160; // a R2 press shorter than this is a tap
 
+// Pouch use: the item goes on C-left for a few game frames and C-left is pressed, so the game's own item code runs
+// (ocarina, lens, beans, masks, trade items). The boot toggles change the boots directly.
+static u8 sPouchItem = ITEM_NONE;
+static u32 sPouchFrame = 0;
+static bool sPouchActive = false;
+// Triangle: A is held back for kTapWindowMs so that a D-pad press in that window is a pouch use and never also A. A tap
+// (released inside the window) sends A for a game frame; a hold sends A from the end of the window until release.
+static bool sTriPrev = false, sASent = false, sTriUsed = false, sTapActive = false;
+static std::chrono::steady_clock::time_point sTriStart, sTapStart;
+static u32 sTapFrame = 0;
+static const int kTapWindowMs = 70;
+static const u32 kPouchFrames = 3;
+static void SetButton(int button, u8 item, u8 slot);
+
+static u16 sHeldAtStart = 0;   // buttons held when the ocarina came out
+static bool sWasOcarina = false;
+
+// Epona's Song played for the player: the ocarina comes out (as from the pouch), then C-up, C-left, C-right twice.
+enum { EPONA_OFF, EPONA_TAKE_OUT, EPONA_WAIT_STAFF, EPONA_PLAY, EPONA_DONE };
+static int sEponaStage = EPONA_OFF;
+static u32 sEponaFrame = 0;
+static int sEponaNote = 0;
+static const u16 kEponaNotes[6] = { BTN_CUP, BTN_CLEFT, BTN_CRIGHT, BTN_CUP, BTN_CLEFT, BTN_CRIGHT };
+static const u32 kEponaNoteFrames = 3; // a note is held this many game frames, then released for as many
+
 // The player is in the middle of using an item (a bottle being drunk, an item change, an item cutscene). The game's
 // item code reads the C buttons then (the bottle is emptied in cButtonSlots[heldItemButton - 1]), so they stay as they are.
 static bool ItemInUse(Player* player) {
@@ -149,10 +178,130 @@ static u32 GameFrame() {
     return gPlayState != nullptr ? gPlayState->gameplayFrames : 0;
 }
 
+static u8 PouchSlotOf(u8 item) {
+    if (item >= ITEM_LETTER_ZELDA && item <= ITEM_CLAIM_CHECK) {
+        return gSaveContext.inventory.items[SLOT_TRADE_ADULT] == item ? (u8)SLOT_TRADE_ADULT : (u8)SLOT_TRADE_CHILD;
+    }
+    return gItemSlots[item];
+}
+
+static bool PouchCanUseNow(u8 item) {
+    bool ocarina = item == ITEM_OCARINA_FAIRY || item == ITEM_OCARINA_TIME;
+    if (ocarina && gPlayState != nullptr && gPlayState->interfaceCtx.restrictions.ocarina) {
+        return false; // the scene does not allow it (the button status is from the last frame)
+    }
+    return gPlayState != nullptr && SoulsLoadout_ButtonItemsStashed() && !SoulsLoadout_TemporaryB() &&
+           !ItemInUseNow() && gPlayState->csCtx.state == CS_STATE_IDLE;
+}
+
+// Use an item as if it was on a C button (the ocarina, lens, beans, masks, trade items)
+static bool PouchPressItem(u8 item) {
+    if (!PouchCanUseNow(item)) {
+        return false;
+    }
+    sPouchItem = item;
+    sPouchFrame = GameFrame();
+    sPouchActive = true;
+    SetButton(1, item, PouchSlotOf(item));
+    return true;
+}
+
+static void PouchUse(int slot) {
+    u8 item = SoulsLoadout_Get(SL_POUCH, slot);
+    if (item == ITEM_NONE || !SoulsLoadout_CanEquip(SL_POUCH, item)) {
+        return;
+    }
+    if (item == SOULS_ITEM_TOGGLE_IRON || item == SOULS_ITEM_TOGGLE_HOVER) {
+        if (gPlayState == nullptr || ItemInUseNow() || gPlayState->csCtx.state != CS_STATE_IDLE) {
+            return;
+        }
+        int want = item == SOULS_ITEM_TOGGLE_IRON ? EQUIP_VALUE_BOOTS_IRON : EQUIP_VALUE_BOOTS_HOVER;
+        int boots = CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS) == want ? EQUIP_VALUE_BOOTS_KOKIRI : want;
+        GameInteractor::RawAction::ForceEquipBoots(boots);
+        Audio_PlaySfxGeneral(NA_SE_PL_CHANGE_ARMS, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        SoulsLoadout_NoteUse(SL_POUCH);
+        return;
+    }
+    if (PouchPressItem(item)) {
+        SoulsLoadout_NoteUse(SL_POUCH);
+    }
+}
+
+// Square with Epona as the quick item: take out the ocarina, then play her song
+static void EponaStart() {
+    if (sEponaStage != EPONA_OFF) {
+        return;
+    }
+    u8 oca = INV_CONTENT(ITEM_OCARINA_TIME) == ITEM_OCARINA_TIME ? (u8)ITEM_OCARINA_TIME : (u8)ITEM_OCARINA_FAIRY;
+    if (INV_CONTENT(oca) != oca || !PouchPressItem(oca)) {
+        return;
+    }
+    sEponaStage = EPONA_TAKE_OUT;
+    sEponaFrame = GameFrame();
+    sEponaNote = 0;
+    SoulsLoadout_NoteUse(SL_QUICK);
+}
+
+// The note buttons (C bits) Epona's Song presses now; also runs the stages
+static u16 EponaTick(u16 in) {
+    if (sEponaStage == EPONA_OFF) {
+        return 0;
+    }
+    u32 now = GameFrame();
+    bool ocarina = SoulsInput_InOcarina();
+    // The player cancels with Circle or R1 (B)
+    if ((in & BTN_B) || ((in & BTN_A) && (in & BTN_SOULS_MOD1)) ) {
+        sEponaStage = EPONA_OFF;
+        return 0;
+    }
+    switch (sEponaStage) {
+        case EPONA_TAKE_OUT:
+            if (ocarina) {
+                sEponaStage = EPONA_WAIT_STAFF;
+                sEponaFrame = now;
+            } else if (now - sEponaFrame > 40) {
+                sEponaStage = EPONA_OFF; // the ocarina did not come out (not allowed here)
+            }
+            return 0;
+        case EPONA_WAIT_STAFF:
+            if (!ocarina) {
+                sEponaStage = EPONA_OFF;
+            } else if (gPlayState->msgCtx.msgMode == MSGMODE_OCARINA_PLAYING && now - sEponaFrame > 8u) {
+                sEponaStage = EPONA_PLAY;
+                sEponaFrame = now;
+            }
+            return 0;
+        case EPONA_PLAY: {
+            if (!ocarina) {
+                sEponaStage = EPONA_OFF;
+                return 0;
+            }
+            u32 t = now - sEponaFrame;
+            int note = (int)(t / (kEponaNoteFrames * 2));
+            if (note >= 6) {
+                sEponaStage = EPONA_DONE;
+                sEponaFrame = now;
+                return 0;
+            }
+            sEponaNote = note;
+            return (t % (kEponaNoteFrames * 2)) < kEponaNoteFrames ? kEponaNotes[note] : (u16)0;
+        }
+        case EPONA_DONE:
+            if (!ocarina || now - sEponaFrame > 100) {
+                sEponaStage = EPONA_OFF;
+            }
+            return 0;
+    }
+    return 0;
+}
+
 // Play layout. Returns the N64 buttons the game gets.
 static u16 SoulsInput_Play(u16 in) {
     // Cross (Modifier 2) is handled by the caller; the touchpad (L) passes through as the minimap toggle
-    u16 out = in & ~(DPAD_BITS | BTN_B | BTN_R | BTN_Z | BTN_ALL_C | BTN_CUSTOM_MODIFIER2);
+    u16 out = in & ~(DPAD_BITS | BTN_B | BTN_R | BTN_Z | BTN_ALL_C | BTN_CUSTOM_MODIFIER2 | BTN_A);
+    bool circle = (in & BTN_A) && (in & BTN_SOULS_MOD1);
+    if (circle) out |= BTN_A; // Circle sends A + Modifier 1 (roll)
     bool triangle = (in & BTN_A) && !(in & BTN_SOULS_MOD1);
     bool r2 = (in & BTN_CRIGHT) != 0;
     auto now = std::chrono::steady_clock::now();
@@ -182,6 +331,47 @@ static u16 SoulsInput_Play(u16 in) {
     // D-pad: switch hands, spell, quick item (not while Triangle is held: that is the pouch)
     u16 pressed = (in & DPAD_BITS) & ~sPrevDpad;
     sPrevDpad = in & DPAD_BITS;
+    if (triangle && !sTriPrev) {
+        sTriStart = now;
+        sASent = false;
+        sTriUsed = false;
+        sTapActive = false;
+    }
+    if (triangle && (pressed & DPAD_BITS)) {
+        // Triangle + D-pad: pouch 1-4 (up, left, right, down: the slots the HUD shows). A is never sent for this hold
+        // when the press comes before A went out; after that A is released.
+        sTriUsed = true;
+        if (pressed & BTN_DUP) PouchUse(0);
+        else if (pressed & BTN_DLEFT) PouchUse(1);
+        else if (pressed & BTN_DRIGHT) PouchUse(2);
+        else if (pressed & BTN_DDOWN) PouchUse(3);
+    }
+    bool sendA = false;
+    if (triangle) {
+        if (!sTriUsed && !sASent &&
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - sTriStart).count() >= kTapWindowMs) {
+            sASent = true;
+        }
+        sendA = sASent && !sTriUsed;
+    } else {
+        if (sTriPrev && !sTriUsed && !sASent) {
+            sTapActive = true; // a tap: A for at least one game frame
+            sTapStart = now;
+            sTapFrame = GameFrame();
+        }
+        if (sTapActive) {
+            if (GameFrame() == sTapFrame &&
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - sTapStart).count() < 120) {
+                sendA = true;
+            } else {
+                sTapActive = false;
+            }
+        }
+        sTriUsed = false;
+        sASent = false;
+    }
+    if (sendA) out |= BTN_A;
+    sTriPrev = triangle;
     if (!triangle && !ItemInUseNow()) {
         if (pressed & BTN_DRIGHT) SoulsLoadout_Cycle(SL_RIGHT, 1);
         if (pressed & BTN_DLEFT) SoulsLoadout_Cycle(SL_LEFT, 1);
@@ -209,8 +399,21 @@ static u16 SoulsInput_Play(u16 in) {
     // Square: the quick item, on C-left
     if (square) {
         out |= BTN_CLEFT;
-        if (!sPrevSquare && UsableCurrent(SL_QUICK) != ITEM_NONE) SoulsLoadout_NoteUse(SL_QUICK);
+        if (!sPrevSquare && UsableCurrent(SL_QUICK) == SOULS_ITEM_EPONA) {
+            EponaStart();
+        } else if (!sPrevSquare && UsableCurrent(SL_QUICK) != ITEM_NONE) {
+            SoulsLoadout_NoteUse(SL_QUICK);
+        }
     }
+    // A pouch item is pressed on C-left for a few frames
+    if (sPouchActive) {
+        if (GameFrame() - sPouchFrame < kPouchFrames) {
+            out |= BTN_CLEFT;
+        } else {
+            sPouchActive = false;
+        }
+    }
+    EponaTick(in); // runs the stages (the notes are pressed in the ocarina branch)
     sPrevR1 = r1;
     sPrevL1 = l1;
     sPrevSquare = square;
@@ -241,19 +444,44 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
             sJumpFrame = gPlayState->gameplayFrames;
         }
         sCrossWasDown = cross;
+        sWasOcarina = false;
         *buttons = SoulsInput_Play(in);
         return;
     }
     SoulsLoadout_SetPouchHeld(false);
+    sTriPrev = sASent = sTriUsed = sTapActive = false;
+    if (!SoulsInput_InOcarina()) {
+        sWasOcarina = false;
+    }
     sPrevDpad = in & DPAD_BITS;
     sPrevR1 = sPrevL1 = sPrevSquare = sPrevR2 = false;
     sSlashPending = false;
 
     if (SoulsInput_InOcarina()) {
-        // The ocarina: the D-pad plays the C notes, Triangle is A
-        sCrossWasDown = (in & BTN_CUSTOM_MODIFIER2) != 0;
+        // Cross = A note, D-pad = C notes, Circle (and R1) puts the ocarina away. Triangle does nothing here: it is
+        // often still held from the pouch press that took the ocarina out, and the game ignores a held start button.
+        // Buttons still held from the press that took the ocarina out (the pouch press, Triangle + D-pad) are not notes
+        // until they are released.
+        const u16 kNoteBits = DPAD_BITS | BTN_A | BTN_CUSTOM_MODIFIER2;
+        if (!sWasOcarina) {
+            sHeldAtStart = in & kNoteBits;
+        }
+        sHeldAtStart &= in;
+        sWasOcarina = true;
+        in &= ~sHeldAtStart;
+        bool circle = (in & BTN_A) && (in & BTN_SOULS_MOD1);
+        bool cross = (in & BTN_CUSTOM_MODIFIER2) != 0;
+        u16 out = in & ~(DPAD_BITS | BTN_ALL_C | BTN_A | BTN_B | BTN_CUSTOM_MODIFIER2);
+        u16 notes = SoulsInput_DpadToC(in) | EponaTick(in);
+        if (circle || (in & BTN_B)) {
+            out |= BTN_B;
+        } else if (cross) {
+            out |= BTN_A;
+        }
+        sCrossWasDown = cross;
         sJumpPending = false;
-        *buttons = (in & ~(DPAD_BITS | BTN_CUSTOM_MODIFIER2)) | SoulsInput_DpadToC(in);
+        sPouchActive = false;
+        *buttons = out | notes;
         return;
     }
 
@@ -359,6 +587,12 @@ static void RegisterSoulsJumpReset() {
     });
 }
 
+static void RegisterSoulsMaskStays() {
+    // A worn mask normally comes off when it leaves the C buttons; the loadout moves the buttons around
+    COND_VB_SHOULD(VB_PLAYER_UNEQUIP_MASK_WITHOUT_BUTTON, CVarGetInteger(CVAR_SOULS_CONTROLS, 0), { *should = false; });
+}
+
+static RegisterShipInitFunc initSoulsMaskStays(RegisterSoulsMaskStays, { CVAR_SOULS_CONTROLS });
 static RegisterShipInitFunc initSoulsJump(RegisterSoulsJump, { CVAR_SOULS_CONTROLS });
 static RegisterShipInitFunc initSoulsJumpReset(RegisterSoulsJumpReset, { CVAR_SOULS_CONTROLS });
 
@@ -473,6 +707,12 @@ static void SyncLoadout() {
             SoulsLoadout_Set(SL_LEFT, i, ITEM_LONGSHOT);
         }
     }
+    // The Fairy Ocarina pouch slot turns into the Ocarina of Time when it is upgraded
+    for (int i = 0; i < SoulsLoadout_Capacity(SL_POUCH); i++) {
+        if (SoulsLoadout_Get(SL_POUCH, i) == ITEM_OCARINA_FAIRY && INV_CONTENT(ITEM_OCARINA_TIME) == ITEM_OCARINA_TIME) {
+            SoulsLoadout_Set(SL_POUCH, i, ITEM_OCARINA_TIME);
+        }
+    }
     for (int k = SL_RIGHT; k <= SL_QUICK; k++) {
         SkipUnusable((SoulsLoadoutKind)k);
     }
@@ -496,12 +736,52 @@ static void SyncLoadout() {
     }
 
     u8 item, slot;
-    QuickOnButton(&item, &slot);
+    if (sPouchActive && GameFrame() - sPouchFrame < kPouchFrames + 1) {
+        item = sPouchItem; // a pouch use is on C-left
+        slot = PouchSlotOf(item);
+    } else {
+        QuickOnButton(&item, &slot);
+    }
     SetButton(1, item, slot);
     ToolOnButton(left, &item, &slot);
     SetButton(2, item, slot);
     ToolOnButton(right, &item, &slot);
     SetButton(3, item, slot);
+
+    // The game turns the lens off, and drops a held item, when it is on no C button. Derive what is in use from the game
+    // state every frame and keep those items on a free C button (else C-left; the quick item waits). Masks stay on by
+    // themselves (VB_PLAYER_UNEQUIP_MASK_WITHOUT_BUTTON below).
+    {
+        u8 keep[2] = { ITEM_NONE, ITEM_NONE };
+        if (gPlayState->actorCtx.lensActive) {
+            keep[0] = ITEM_LENS;
+        }
+        for (int i = 0; i < SoulsLoadout_Capacity(SL_POUCH); i++) {
+            u8 it = SoulsLoadout_Get(SL_POUCH, i);
+            if (it == ITEM_BEAN && Player_ItemToItemAction(it) == player->heldItemAction) {
+                keep[1] = it;
+            }
+        }
+        for (int k = 0; k < 2; k++) {
+            if (keep[k] == ITEM_NONE) {
+                continue;
+            }
+            int free = 1;
+            for (int b = 3; b >= 1; b--) {
+                if (gSaveContext.equips.buttonItems[b] == keep[k]) {
+                    free = 0;
+                    break;
+                }
+                if (gSaveContext.equips.buttonItems[b] == ITEM_NONE) {
+                    free = b;
+                    break;
+                }
+            }
+            if (free > 0) {
+                SetButton(free, keep[k], PouchSlotOf(keep[k]));
+            }
+        }
+    }
 }
 
 static void RegisterSoulsLoadoutSync() {
