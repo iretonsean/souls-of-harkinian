@@ -3521,7 +3521,13 @@ void KaleidoScope_Draw(PlayState* play) {
 
         Gfx_SetupDL_42Opa(play->state.gfxCtx);
         KaleidoScope_InitVertices(play, play->state.gfxCtx);
-        KaleidoScope_DrawPages(play, play->state.gfxCtx);
+        if (SoulsEquipPage_Shown(play)) {
+            // Souls of Harkinian: the Equipment page is a full screen of its own: no cube, no other pages. Only Link's
+            // frame buffer is drawn (inside DrawEquipment).
+            KaleidoScope_DrawEquipment(play);
+        } else {
+            KaleidoScope_DrawPages(play, play->state.gfxCtx);
+        }
 
         Gfx_SetupDL_42Opa(play->state.gfxCtx);
         gDPSetCombineLERP(POLY_OPA_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
