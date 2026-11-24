@@ -2,6 +2,10 @@
 
 Order of work. Each step is prototyped first, then built.
 
+**Next: the Elden Ring system** (`ER-SYSTEM.md`): phase 1 controls + slots + HUD and phase 2 Equipment page ship
+together, then phase 3 pouch, ocarina, Epona. Steps 2 and 3 below come after it (the 13 swords become right-hand
+armaments in the new slots).
+
 ## Done
 - Separate menu and play layouts for the D-pad (`SoulsInput.cpp`).
 - Built-in jump on Cross (Roc's Feather jump, no item on the HUD).
