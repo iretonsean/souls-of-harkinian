@@ -21,6 +21,7 @@ extern "C" {
 #include "macros.h"
 #include "src/overlays/gamestates/ovl_file_choose/file_choose.h"
 void FileChoose_UpdateStickDirectionPromptAnim(GameState* thisx);
+s32 Player_OverrideLimbDrawPause(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* arg);
 }
 
 // From CosmeticsEditor.cpp (its header pulls in ImGui; only this function is needed here)
@@ -75,6 +76,7 @@ const Row kRows[] = {
 constexpr uint8_t kRowCount = sizeof(kRows) / sizeof(kRows[0]);
 
 bool sActive = false;
+bool sPreviewAdult = false; // L1 (N64 R in menus) switches the preview between child and adult
 uint8_t sIndex = 0;
 uint8_t sOffset = 0;
 int16_t sAlpha = 0;
@@ -247,6 +249,11 @@ extern "C" void SoulsCreator_Update(void* state) {
         PlaySfx(NA_SE_SY_FSEL_CURSOR);
     }
 
+    if (CHECK_BTN_ALL(input->press.button, BTN_R)) {
+        sPreviewAdult = !sPreviewAdult;
+        PlaySfx(NA_SE_SY_FSEL_CURSOR);
+    }
+
     if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
         ctx->configMode = CM_SETTINGS_MENU_TO_QUEST;
         return;
@@ -304,4 +311,91 @@ extern "C" void SoulsCreator_Draw(void* context) {
             FileChoose_DrawListCursorArrow(ctx, alpha, 58.0f, (f32)(y + 5), false);
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Live preview: the real child/adult Link (skeleton, idle animation, current cosmetics), drawn on the right side of
+// the screen the way the pause screen's equipment page draws him, but straight onto the screen.
+// The file select has no PlayState, so a zeroed one stands in: Link's draw code only reads its graphics context.
+namespace {
+PlayState* sPreviewPlay = nullptr;
+u8* sPreviewSegment = nullptr;
+SkelAnime sPreviewSkel;
+s32 sPreviewLoadedAge = -1;
+s32 sPreviewAge = LINK_AGE_CHILD;
+s16 sPreviewYaw = 32300;
+} // namespace
+
+extern "C" void SoulsCreator_SetPreviewAge(int age) {
+    sPreviewAge = age ? LINK_AGE_CHILD : LINK_AGE_ADULT;
+}
+
+extern "C" void SoulsCreator_DrawPreview(void* state) {
+    GameState* gameState = (GameState*)state;
+    FileChooseContext* ctx = (FileChooseContext*)gameState;
+    if (!sActive || ctx->configMode != CM_SETTINGS_MENU) {
+        return;
+    }
+    if (sPreviewPlay == nullptr) {
+        sPreviewPlay = (PlayState*)calloc(1, sizeof(PlayState));
+        sPreviewSegment = (u8*)malloc(0x400000);
+    }
+    sPreviewPlay->state.gfxCtx = gameState->gfxCtx;
+    sPreviewPlay->view.eye = Vec3f{ 0.0f, 0.0f, -400.0f };
+
+    sPreviewAge = sPreviewAdult ? LINK_AGE_ADULT : LINK_AGE_CHILD;
+    s32 savedAge = gSaveContext.linkAge;
+    gSaveContext.linkAge = sPreviewAge;
+    if (sPreviewLoadedAge != sPreviewAge) {
+        func_80091738(sPreviewPlay, sPreviewSegment, &sPreviewSkel);
+        sPreviewLoadedAge = sPreviewAge;
+    }
+    LinkAnimation_Update(sPreviewPlay, &sPreviewSkel);
+
+    // Right side of the 320x240 screen
+    const s32 vx = 236, vy = 24, vw = 84, vh = 184;
+    static Vp viewport;
+    static Lights1 lights = gdSPDefLights1(80, 80, 80, 255, 255, 255, 84, 84, -84);
+    Vec3f lightDir = { 89.8f, 0.0f, 89.8f };
+    Vec3f eye = { 0.0f, 0.0f, -400.0f };
+    Vec3f at = { 0.0f, (sPreviewAge == LINK_AGE_CHILD) ? 60.0f : 0.0f, 0.0f };
+    Vec3f pos = (sPreviewAge == LINK_AGE_CHILD) ? Vec3f{ 0.0f, -185.0f, -80.0f } : Vec3f{ 20.0f, -180.0f, -40.0f };
+    Vec3s rot = { 0, sPreviewYaw, 0 };
+    f32 scale = (sPreviewAge == LINK_AGE_CHILD) ? 0.058f : 0.047f;
+    u8 swordAndShield[2] = { (u8)(sPreviewAge == LINK_AGE_CHILD ? PLAYER_SWORD_KOKIRI : PLAYER_SWORD_MASTER),
+                             (u8)(sPreviewAge == LINK_AGE_CHILD ? PLAYER_SHIELD_DEKU : PLAYER_SHIELD_HYLIAN) };
+    u16 perspNorm;
+    Mtx* perspMtx = (Mtx*)Graph_Alloc(gameState->gfxCtx, sizeof(Mtx));
+    Mtx* lookAtMtx = (Mtx*)Graph_Alloc(gameState->gfxCtx, sizeof(Mtx));
+
+    OPEN_DISPS(gameState->gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    viewport.vp.vscale[0] = vw * 2;
+    viewport.vp.vscale[1] = vh * 2;
+    viewport.vp.vscale[2] = G_MAXZ / 2;
+    viewport.vp.vtrans[0] = (vx + vw / 2) * 4;
+    viewport.vp.vtrans[1] = (vy + vh / 2) * 4;
+    viewport.vp.vtrans[2] = G_MAXZ / 2;
+    gSPViewport(POLY_OPA_DISP++, &viewport);
+    guPerspective(perspMtx, &perspNorm, 60.0f, (f32)vw / (f32)vh, 10.0f, 4000.0f, 1.0f);
+    gSPPerspNormalize(POLY_OPA_DISP++, perspNorm);
+    gSPMatrix(POLY_OPA_DISP++, perspMtx, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
+    guLookAt(lookAtMtx, eye.x, eye.y, eye.z, at.x, at.y, at.z, 0.0f, 1.0f, 0.0f);
+    gSPMatrix(POLY_OPA_DISP++, lookAtMtx, G_MTX_NOPUSH | G_MTX_MUL | G_MTX_PROJECTION);
+
+    Matrix_SetTranslateRotateYXZ(pos.x, pos.y, pos.z, &rot);
+    Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
+    gSPSegment(POLY_OPA_DISP++, 0x04, sPreviewSegment + 0x3800);
+    gSPSegment(POLY_OPA_DISP++, 0x06, sPreviewSegment + 0x8800);
+    gSPSetLights1(POLY_OPA_DISP++, lights);
+    func_80093C80(sPreviewPlay);
+    POLY_OPA_DISP = Gfx_SetFog2(POLY_OPA_DISP++, 0, 0, 0, 0, 997, 1000);
+    func_8002EABC(&pos, &eye, &lightDir, gameState->gfxCtx);
+    gSPSegment(POLY_OPA_DISP++, 0x0C, gCullBackDList);
+    Player_DrawImpl(sPreviewPlay, sPreviewSkel.skeleton, sPreviewSkel.jointTable, sPreviewSkel.dListCount, 0,
+                    PLAYER_TUNIC_KOKIRI, PLAYER_BOOTS_KOKIRI, 0, Player_OverrideLimbDrawPause, NULL, swordAndShield);
+    CLOSE_DISPS(gameState->gfxCtx);
+
+    gSaveContext.linkAge = savedAge;
 }

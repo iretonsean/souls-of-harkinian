@@ -15,6 +15,8 @@ int16_t* SoulsCreator_UIAlpha(void);
 uint16_t* SoulsCreator_ArrowOffset(void);
 void SoulsCreator_Update(void* gameState);       // GameState* of the file select
 void SoulsCreator_Draw(void* fileChooseContext); // FileChooseContext*
+void SoulsCreator_DrawPreview(void* gameState);  // live Link preview, call at the end of the file select frame
+void SoulsCreator_SetPreviewAge(int child);
 #ifdef __cplusplus
 }
 #endif

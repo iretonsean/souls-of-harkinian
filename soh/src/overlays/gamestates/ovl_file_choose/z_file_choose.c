@@ -3112,6 +3112,9 @@ void FileChoose_Main(GameState* thisx) {
     // Draw rando save version warning over the controls text, but before the screen fill fade out
     FileChoose_DrawRandoSaveVersionWarning(&this->state);
 
+    // Souls of Harkinian: the creator's live Link preview (does nothing unless the creator is open)
+    SoulsCreator_DrawPreview(&this->state);
+
     gDPPipeSync(POLY_OPA_DISP++);
     gSPDisplayList(POLY_OPA_DISP++, sScreenFillSetupDL);
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 0, 0, 0, sScreenFillAlpha);
