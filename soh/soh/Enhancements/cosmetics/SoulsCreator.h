@@ -17,6 +17,7 @@ void SoulsCreator_Update(void* gameState);       // GameState* of the file selec
 void SoulsCreator_Draw(void* fileChooseContext); // FileChooseContext*
 void SoulsCreator_DrawPreview(void* gameState);  // live Link preview, call at the end of the file select frame
 void SoulsCreator_SetPreviewAge(int child);
+bool SoulsCreator_OnNameConfirmed(void* fileChooseContext); // name entry END: true = back to the creator
 #ifdef __cplusplus
 }
 #endif

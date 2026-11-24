@@ -780,6 +780,57 @@ void FileChoose_StartNameEntryFromMenu(FileChooseContext* this) {
     CVarSetInteger(CVAR_GENERAL("OnFileSelectNameEntry"), 1);
 }
 
+/**
+ * Souls of Harkinian: the name typed so far for the new file, as plain ASCII (letters, digits, '-' for other marks).
+ * Returns how many characters the name has; 0 means it is still empty.
+ */
+int FileChoose_GetNewFileName(FileChooseContext* this, char* out, int outSize) {
+    u8* name = Save_GetSaveMetaInfo(this->buttonIndex)->playerName;
+    bool pal = ResourceMgr_GetGameRegion(0) == GAME_REGION_PAL && gSaveContext.language != LANGUAGE_JPN;
+    int count = 0;
+
+    for (int i = 0; i < 8 && count < outSize - 1; i++) {
+        u8 c = name[i];
+        char ch;
+        if (pal) {
+            if (c == 0x3E) {
+                continue; // empty slot
+            }
+            ch = c <= 0x09 ? '0' + c : c <= 0x23 ? 'A' + (c - 0x0A) : c <= 0x3D ? 'a' + (c - 0x24) : '-';
+        } else {
+            if (c == 0xDF) {
+                continue; // empty slot
+            }
+            ch = (c >= 0x9F && c <= 0xA8)   ? '0' + (c - 0x9F)
+                 : (c >= 0xAB && c <= 0xC4) ? 'A' + (c - 0xAB)
+                 : (c >= 0xC5 && c <= 0xDE) ? 'a' + (c - 0xC5)
+                                            : '-';
+        }
+        out[count++] = ch;
+    }
+    out[count] = '\0';
+    return count;
+}
+
+/**
+ * Souls of Harkinian: create the new file from the creator once the name is already set (same steps as pressing END
+ * on the name entry keyboard).
+ */
+void FileChoose_FinishNewFileFromMenu(FileChooseContext* this) {
+    u16 dayTime;
+
+    gSaveContext.fileNum = this->buttonIndex;
+    dayTime = ((void)0, gSaveContext.dayTime);
+    Sram_InitSave(this);
+    gSaveContext.dayTime = dayTime;
+    this->prevConfigMode = CM_MAIN_MENU;
+    this->configMode = CM_NAME_ENTRY_TO_MAIN;
+    CVarSetInteger(CVAR_GENERAL("OnFileSelectNameEntry"), 0);
+    this->nameBoxAlpha[this->buttonIndex] = this->nameAlpha[this->buttonIndex] = 200;
+    this->connectorAlpha[this->buttonIndex] = 255;
+    Rumble_Request(300.0f, 180, 20, 100);
+}
+
 void FileChoose_UpdateQuestMenu(GameState* thisx) {
     FileChoose_UpdateStickDirectionPromptAnim(thisx);
     FileChooseContext* this = (FileChooseContext*)thisx;
