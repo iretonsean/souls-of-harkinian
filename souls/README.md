@@ -8,9 +8,9 @@ Everything is off until you apply the preset or turn on `gEnhancements.SoulsCont
 - **Separate menu and play layouts.** In play, the D-pad is the C buttons (items, Navi, ocarina notes).
   In menus (pause screen, file select, text boxes), the D-pad moves the cursor, Cross confirms and Circle
   goes back. To put an item on a C button in the pause screen, hold R1 and press that D-pad direction.
-- **Built-in jump on Cross.** Cross uses the Roc's Feather jump as a move of its own. The feather never
-  shows on a button, in the inventory or on the HUD. One jump until Link lands; no jump while he carries
-  something or during cutscenes.
+- **Built-in jump on Cross.** Cross starts Link's own ledge jump (the running jump when he runs forward, the
+  standing jump otherwise). No item is involved and nothing shows on the HUD. One jump until Link lands; no
+  jump while he carries something, swims, climbs or during cutscenes.
 
 ## Layout (PlayStation names)
 
