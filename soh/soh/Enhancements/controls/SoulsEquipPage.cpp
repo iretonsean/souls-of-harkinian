@@ -18,6 +18,7 @@
 #include "soh/Enhancements/controls/SoulsEquipPage.h"
 #include "soh/Enhancements/controls/SoulsLoadout.h"
 #include "soh/ShipUtils.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/frame_interpolation.h"
 extern "C" {
 #include "z64.h"
@@ -269,6 +270,8 @@ const char* ItemDesc(uint8_t id) {
 // State
 
 bool sPicker = false;
+bool sConsumedB = false; // Circle closed a list this frame: OoT must not also take it
+std::vector<uint8_t> sList; // the open list (built when it opens and after each change)
 int sRow = 0, sCol = 0;       // the selected slot on the page (col counts the real slots, not the gaps)
 int sOpenKind = 0, sOpenIdx = 0; // the slot the list was opened from
 int sPcur = 0;                // the selected item in the list
@@ -393,7 +396,9 @@ bool ChooseOneUsable(int kind, uint8_t id) {
     if (!CHECK_OWNED_EQUIP(row, value - 1)) {
         return false;
     }
-    return gEquipAgeReqs[row][value] == 9 || gEquipAgeReqs[row][value] == gSaveContext.linkAge;
+    return GameInteractor_Should(VB_PLAYER_MEETS_AGE_REQ,
+                                 gEquipAgeReqs[row][value] == 9 || gEquipAgeReqs[row][value] == gSaveContext.linkAge,
+                                 gEquipAgeReqs[row][value]);
 }
 
 uint8_t SlotItem(SlotDef s) {
@@ -437,7 +442,7 @@ void SetChooseOne(int kind, uint8_t id) {
 
 // Cross on an item in the list
 void ListConfirm() {
-    std::vector<uint8_t> list = BuildList(sOpenKind);
+    std::vector<uint8_t>& list = sList;
     if (list.empty()) {
         Sfx(NA_SE_SY_ERROR);
         return;
@@ -487,6 +492,7 @@ void OpenList() {
     }
     sOpenKind = s.kind;
     sOpenIdx = s.idx;
+    sList = list;
     uint8_t cur = SlotItem(s);
     sPcur = 0;
     for (size_t i = 0; i < list.size(); i++) {
@@ -531,7 +537,7 @@ void Move(int dir) {
         }
         return;
     }
-    std::vector<uint8_t> list = BuildList(sOpenKind);
+    std::vector<uint8_t>& list = sList;
     int n = (int)list.size();
     if (n == 0) {
         return;
@@ -554,23 +560,30 @@ void Move(int dir) {
 // must have C linkage.
 } // namespace
 
-static int sOx = 0; // left edge of the screen in game units (0 on 4:3, about -53 on 16:9)
+static int sOx = 0;
+static float sSc = 1.0f, sOy = 0.0f; // layout units -> game units: x * sSc + sOx, y * sSc + sOy
+static bool sFillOk = false;    // the RDP is set up for fills (cleared by everything else that draws)
+#define LX(v) (((v) * sSc) + sOx)
+#define LY(v) (((v) * sSc) + sOy) // left edge of the screen in game units (0 on 4:3, about -53 on 16:9)
 
 static void FillQ(GraphicsContext* gfx, float x, float y, float w, float h, int r, int g, int b, int a) {
     if (a <= 0 || w <= 0 || h <= 0) {
         return;
     }
-    int x0 = (int)lroundf((x + sOx) * 4), y0 = (int)lroundf(y * 4);
-    int x1 = (int)lroundf((x + w + sOx) * 4), y1 = (int)lroundf((y + h) * 4);
+    int x0 = (int)lroundf(LX(x) * 4), y0 = (int)lroundf(LY(y) * 4);
+    int x1 = (int)lroundf(LX(x + w) * 4), y1 = (int)lroundf(LY(y + h) * 4);
     OPEN_DISPS(gfx);
-    gDPPipeSync(POLY_OPA_DISP++);
-    gSPClearGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BOTH | G_FOG | G_LIGHTING | G_TEXTURE_GEN |
-                                              G_TEXTURE_GEN_LINEAR | G_LOD | G_SHADING_SMOOTH);
-    gDPSetOtherMode(POLY_OPA_DISP++,
-                    G_AD_DISABLE | G_CD_MAGICSQ | G_CK_NONE | G_TC_FILT | G_TF_BILERP | G_TT_NONE | G_TL_TILE |
-                        G_TD_CLAMP | G_TP_NONE | G_CYC_1CYCLE | G_PM_1PRIMITIVE,
-                    G_AC_NONE | G_ZS_PIXEL | G_RM_CLD_SURF | G_RM_CLD_SURF2);
-    gDPSetCombineMode(POLY_OPA_DISP++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
+    if (!sFillOk) {
+        gDPPipeSync(POLY_OPA_DISP++);
+        gSPClearGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BOTH | G_FOG | G_LIGHTING | G_TEXTURE_GEN |
+                                                  G_TEXTURE_GEN_LINEAR | G_LOD | G_SHADING_SMOOTH);
+        gDPSetOtherMode(POLY_OPA_DISP++,
+                        G_AD_DISABLE | G_CD_MAGICSQ | G_CK_NONE | G_TC_FILT | G_TF_BILERP | G_TT_NONE | G_TL_TILE |
+                            G_TD_CLAMP | G_TP_NONE | G_CYC_1CYCLE | G_PM_1PRIMITIVE,
+                        G_AC_NONE | G_ZS_PIXEL | G_RM_CLD_SURF | G_RM_CLD_SURF2);
+        gDPSetCombineMode(POLY_OPA_DISP++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
+        sFillOk = true;
+    }
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, r, g, b, a);
     // gDPFillWideRectangle with the coordinates already in quarter units
     Gfx* g0 = POLY_OPA_DISP++;
@@ -591,10 +604,10 @@ static void Ring(GraphicsContext* gfx, float x, float y, float w, float h, float
 }
 
 static void Disc(GraphicsContext* gfx, float cx, float cy, float rad, int r, int g, int b, int a) {
-    for (float dy = -rad; dy < rad; dy += 0.5f) {
-        float yy = dy + 0.25f;
+    for (float dy = -rad; dy < rad; dy += 1.0f) {
+        float yy = dy + 0.5f;
         float hw = sqrtf(std::max(0.0f, rad * rad - yy * yy));
-        FillQ(gfx, cx - hw, cy + dy, 2 * hw, 0.5f, r, g, b, a);
+        FillQ(gfx, cx - hw, cy + dy, 2 * hw, 1.0f, r, g, b, a);
     }
 }
 
@@ -609,24 +622,25 @@ static float TextW(const char* text, float scale) {
 
 static float Text(GraphicsContext* gfx, const char* text, float x, float y, int r, int g, int b, float scale,
                   bool shadow = true) {
+    sFillOk = false;
     OPEN_DISPS(gfx);
     Gfx_SetupDL_39Opa(gfx);
     gDPSetCombineLERP(POLY_OPA_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0, PRIMITIVE,
                       ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 0);
-    int sz = (int)lroundf(16.0f * scale * 4); // quarter units
-    int texScale = (int)(1024.0f / scale);
+    int sz = (int)lroundf(16.0f * scale * sSc * 4); // quarter units
+    int texScale = (int)(1024.0f / (scale * sSc));
     float cx = x;
     for (const char* c = text; *c != '\0'; c++) {
         if (*c != ' ') {
             void* tex = Ship_GetCharFontTexture((u8)*c);
-            int xq = (int)lroundf((cx + sOx) * 4), yq = (int)lroundf(y * 4);
+            int xq = (int)lroundf(LX(cx) * 4), yq = (int)lroundf(LY(y) * 4);
             gDPPipeSync(POLY_OPA_DISP++);
             gDPLoadTextureBlock_4b(POLY_OPA_DISP++, tex, G_IM_FMT_I, FONT_CHAR_TEX_WIDTH, FONT_CHAR_TEX_HEIGHT, 0,
                                    G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
                                    G_TX_NOLOD, G_TX_NOLOD);
             if (shadow) {
-                int o = (int)lroundf(0.8f * 4);
+                int o = (int)lroundf(0.8f * sSc * 4);
                 gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 0, 0, 0, 255);
                 gSPWideTextureRectangle(POLY_OPA_DISP++, xq + o, yq + o, xq + o + sz, yq + o + sz, G_TX_RENDERTILE, 0,
                                         0, texScale, texScale);
@@ -678,6 +692,7 @@ static void Window(GraphicsContext* gfx, float x, float y, float w, float h) {
     const float us[4] = { 0, 16, 224, 240 }, vs[4] = { 0, 26, 146, 160 };
     const float xs[4] = { x, x + 8, x + w - 8, x + w }, ys[4] = { y, y + 13, y + h - 7, y + h };
     FillQ(gfx, x + 3, y + 3, w - 6, h - 6, 10, 10, 12, 215); // keeps the pages behind from showing through
+    sFillOk = false;
     OPEN_DISPS(gfx);
     Gfx_SetupDL_39Opa(gfx);
     gDPSetCombineMode(POLY_OPA_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
@@ -705,13 +720,13 @@ static void Window(GraphicsContext* gfx, float x, float y, float w, float h) {
                     float ky = (ys[pj + 1] - ys[pj]) / (vs[pj + 1] - vs[pj]);
                     float dx0 = xs[pi] + (u0 - us[pi]) * kx, dx1 = xs[pi] + (u1 - us[pi]) * kx;
                     float dy0 = ys[pj] + (v0 - vs[pj]) * ky, dy1 = ys[pj] + (v1 - vs[pj]) * ky;
-                    int xq0 = (int)lroundf((dx0 + sOx) * 4), xq1 = (int)lroundf((dx1 + sOx) * 4);
-                    int yq0 = (int)lroundf(dy0 * 4), yq1 = (int)lroundf(dy1 * 4);
+                    int xq0 = (int)lroundf(LX(dx0) * 4), xq1 = (int)lroundf(LX(dx1) * 4);
+                    int yq0 = (int)lroundf(LY(dy0) * 4), yq1 = (int)lroundf(LY(dy1) * 4);
                     if (xq1 <= xq0 || yq1 <= yq0) {
                         continue;
                     }
-                    int dsdx = (int)lroundf(1024.0f * (u1 - u0) / (dx1 - dx0));
-                    int dtdy = (int)lroundf(1024.0f * (v1 - v0) / (dy1 - dy0));
+                    int dsdx = (int)lroundf(1024.0f * (u1 - u0) / ((dx1 - dx0) * sSc));
+                    int dtdy = (int)lroundf(1024.0f * (v1 - v0) / ((dy1 - dy0) * sSc));
                     gSPWideTextureRectangle(POLY_OPA_DISP++, xq0, yq0, xq1, yq1, G_TX_RENDERTILE,
                                             (int)lroundf((u0 - tu0) * 32), (int)lroundf((v0 - tv0) * 32), dsdx, dtdy);
                 }
@@ -750,8 +765,9 @@ static void Icon(GraphicsContext* gfx, uint8_t id, float fx, float fy, float fsi
     if (tex == nullptr) {
         return;
     }
-    int xq0 = (int)lroundf((fx + sOx) * 4), yq0 = (int)lroundf(fy * 4);
-    int sq = (int)lroundf(fsize * 4);
+    int xq0 = (int)lroundf(LX(fx) * 4), yq0 = (int)lroundf(LY(fy) * 4);
+    int sq = (int)lroundf(fsize * sSc * 4);
+    sFillOk = false;
     OPEN_DISPS(gfx);
     Gfx_SetupDL_39Opa(gfx);
     gDPPipeSync(POLY_OPA_DISP++);
@@ -760,7 +776,7 @@ static void Icon(GraphicsContext* gfx, uint8_t id, float fx, float fy, float fsi
     gDPLoadTextureBlock(POLY_OPA_DISP++, (void*)tex, G_IM_FMT_RGBA, G_IM_SIZ_32b, dim, dim, 0,
                         G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD,
                         G_TX_NOLOD);
-    int dsdx = (int)lroundf(1024.0f * dim / fsize);
+    int dsdx = (int)lroundf(1024.0f * dim / (fsize * sSc));
     gSPWideTextureRectangle(POLY_OPA_DISP++, xq0, yq0, xq0 + sq, yq0 + sq, G_TX_RENDERTILE, 0, 0, dsdx, dsdx);
     CLOSE_DISPS(gfx);
 }
@@ -914,7 +930,10 @@ static void DrawMainPage(GraphicsContext* gfx, PlayState* play) {
     // Right: Link and his status
     Window(gfx, 262, 18, 156, 196);
     FillQ(gfx, 276, 34, 128, 92, 10, 14, 26, 255);
-    KaleidoScope_DrawPauseLink2D(play, 276 + sOx, 34, 128, 92);
+    sFillOk = false;
+    KaleidoScope_DrawPauseLink2D(play, (int)lroundf(LX(276)), (int)lroundf(LY(34)), (int)lroundf(128 * sSc),
+                                 (int)lroundf(92 * sSc));
+    sFillOk = false;
     Ring(gfx, 276, 34, 128, 92, 0.6f, 160, 190, 255, 128);
 
     uint8_t right = SoulsLoadout_Current(SL_RIGHT), shield = EquippedChooseOne(K_SHIELD);
@@ -1049,7 +1068,7 @@ static void DrawStatCard(GraphicsContext* gfx, uint8_t newId, uint8_t baseId, fl
 
 static void DrawListPage(GraphicsContext* gfx) {
     int kind = sOpenKind;
-    std::vector<uint8_t> list = BuildList(kind);
+    std::vector<uint8_t>& list = sList;
     if (list.empty()) {
         sPicker = false;
         return;
@@ -1157,7 +1176,7 @@ extern "C" bool SoulsEquipPage_Shown(PlayState* play) {
 }
 
 extern "C" bool SoulsEquipPage_ConsumesBack(PlayState* play) {
-    return SoulsEquipPage_Shown(play);
+    return sConsumedB;
 }
 
 extern "C" bool SoulsEquipPage_BlocksPageTurn(PlayState* play) {
@@ -1165,7 +1184,9 @@ extern "C" bool SoulsEquipPage_BlocksPageTurn(PlayState* play) {
 }
 
 extern "C" void SoulsEquipPage_Update(PlayState* play) {
+    sConsumedB = false;
     if (!SoulsLoadout_IsEnabled()) {
+        sPicker = false;
         return;
     }
     PauseContext* p = &play->pauseCtx;
@@ -1178,9 +1199,7 @@ extern "C" void SoulsEquipPage_Update(PlayState* play) {
     sTriPrev = triDown;
 
     if (!IsEquipPageUp(play)) {
-        if (p->pageIndex != PAUSE_EQUIP) {
-            sPicker = false;
-        }
+        sPicker = false; // a list never stays open when the page is not up (page turn, Start, closing the pause)
         sDirPrev = 0;
         return;
     }
@@ -1230,18 +1249,14 @@ extern "C" void SoulsEquipPage_Update(PlayState* play) {
             OpenList();
         } else if (triEdge) {
             EmptySlot();
-        } else if (pressB) {
-            // Back: close the pause menu (the same steps as Start)
-            Interface_SetDoAction(play, DO_ACTION_NONE);
-            p->state = 0x12;
-            WREG(2) = -6240;
-            func_800F64E0(0);
         }
+        // Circle on the page itself is OoT's own (the save prompt)
     } else {
         if (cross) {
             ListConfirm();
         } else if (pressB) {
             sPicker = false;
+            sConsumedB = true;
             Sfx(NA_SE_SY_DECIDE);
         }
     }
@@ -1252,9 +1267,25 @@ extern "C" void SoulsEquipPage_Draw(PlayState* play) {
         return;
     }
     GraphicsContext* gfx = play->state.gfxCtx;
-    sOx = OTRGetRectDimensionFromLeftEdge(0);
-    // Dim the whole screen (the 16:9 width too), then the title and the page
-    FillQ(gfx, -4, -2, 436, 244, 0, 0, 0, 205);
+    // The layout is 426 x 240 units: centred in the visible width, scaled down when the screen is narrower (4:3)
+    int left = OTRGetRectDimensionFromLeftEdge(0), right = OTRGetRectDimensionFromRightEdge(320);
+    float width = (float)(right - left);
+    sSc = std::min(1.0f, width / 426.0f);
+    sOx = (int)lroundf(left + (width - 426.0f * sSc) / 2);
+    sOy = (240.0f - 240.0f * sSc) / 2;
+    sFillOk = false;
+    // Dim the whole visible screen, whatever its shape
+    {
+        float sc = sSc, oy = sOy;
+        int ox = sOx;
+        sSc = 1.0f;
+        sOy = 0;
+        sOx = 0;
+        FillQ(gfx, (float)left - 4, -4, width + 8, 248, 0, 0, 0, 205);
+        sSc = sc;
+        sOy = oy;
+        sOx = ox;
+    }
     Text(gfx, "EQUIPMENT", 14, 4, 255, 220, 120, 0.95f);
     if (sPicker) {
         DrawListPage(gfx);
