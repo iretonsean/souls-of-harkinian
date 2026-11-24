@@ -38,7 +38,7 @@ static s32 HeadOverride(Actor* thisx, PlayState* play, s32 limbIndex, Skin* skin
     (void)skin;
     if (limbIndex == 13) { // the eye: open (the horse actor blinks)
         OPEN_DISPS(play->state.gfxCtx);
-        gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(gEponaEyeOpenTex));
+        gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)SEGMENTED_TO_VIRTUAL(gEponaEyeOpenTex));
         CLOSE_DISPS(play->state.gfxCtx);
     }
     return true;
