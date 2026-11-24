@@ -64,8 +64,8 @@ plus the expectation curve:
 |---|---|---|---|---|
 | Story | x0.5 | expectation lowered 20 % | normal | heart drops on |
 | Hero (vanilla) | x1 | curve as listed | normal | - |
-| Souls | x2 | curve +25 %, Hyper Bosses | Hyper Enemies | - |
-| Master | x4 | curve +50 %, Hyper Bosses | Hyper Enemies | no heart drops |
+| Master | x2 | curve +25 %, Hyper Bosses | Hyper Enemies | - |
+| Souls (hardest) | x4 | curve +50 %, Hyper Bosses | Hyper Enemies | no heart drops |
 Damage taken and Hyper Bosses/Enemies are existing SoH settings (Damage Multiplier, Hyper Bosses, Hyper Enemies,
 No Heart Drops); the path only sets them.
 
