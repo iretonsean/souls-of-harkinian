@@ -57,23 +57,23 @@ Third-party packs are **not in this repository**: their authors' licenses don't 
 downloads them from GameBanana, the authors' own pages, onto your computer, and writes a `SOURCE.txt` with the
 author and link next to each one. The list is `dependencies.json`.
 
-### Weapon skins (installed into `souls-skins/`, not `mods/`)
+### Weapon packs (installed into `souls-skins/`, not `mods/`)
 
-They are the looks of the custom swords. They stay out of `mods/` on purpose: in `mods/` a pack would replace the
-original sword for good. The Souls build loads them under their own names (roadmap step 2); until that ships, they
-are downloaded but unused.
+The swords keep their creators' names in the game. They stay out of `mods/` on purpose: in `mods/` a pack would
+replace the original sword for good. The Souls build loads them under their own names (roadmap step 2); until that
+ships, they are downloaded but unused. `dependencies.json` lists which file of each pack is which sword.
 
-| Weapon | Pack | Author |
-|---|---|---|
-| Deku Splitter | [Longer Kokiri Sword](https://gamebanana.com/mods/664520) | nickelndime246 |
-| Cinder Edge | [Artwork Accurate LttP Master Sword 2.0](https://gamebanana.com/mods/703064) | Anthus |
-| Gale Saber | [WindWakerSword](https://gamebanana.com/mods/728972) | acidicloki |
-| Rimeedge | [Frostblade over Master Sword](https://gamebanana.com/mods/452111) | sitton76 |
-| Stormbrand | [Razor Sword Collection](https://gamebanana.com/mods/597197) | Reppan |
-| Gravestone | [Durandal over Biggoron's Sword](https://gamebanana.com/mods/594055) | Jameriquiah |
-| Sun Scimitar | [Lokomo Sword](https://gamebanana.com/mods/691194) | Jameriquiah |
-| Desert Fang | [Golden Claymore over Biggoron's Sword](https://gamebanana.com/mods/442039) | sitton76 |
-| Sage's Brand | [Phantom Sword](https://gamebanana.com/mods/689100) | Fado |
+| Sword in the game | Age | Pack | Author |
+|---|---|---|---|
+| Longer Kokiri Sword | child | [Longer Kokiri Sword](https://gamebanana.com/mods/664520) | nickelndime246 |
+| Razor Sword | child, adult | [Razor Sword Collection](https://gamebanana.com/mods/597197) | Reppan |
+| Phantom Sword | child, adult | [Phantom Sword](https://gamebanana.com/mods/689100) | Fado |
+| Frostblade | adult | [Frostblade over Master Sword](https://gamebanana.com/mods/452111) | sitton76 |
+| WindWakerSword | adult | [WindWakerSword](https://gamebanana.com/mods/728972) | acidicloki |
+| Lokomo Sword | adult | [Lokomo Sword](https://gamebanana.com/mods/691194) | Jameriquiah |
+| Master Sword (LttP), Tempered Sword, Golden Sword | adult | [Artwork Accurate LttP Master Sword 2.0](https://gamebanana.com/mods/703064) | Anthus |
+| Durandal | adult | [Durandal over Biggoron's Sword](https://gamebanana.com/mods/594055) | Jameriquiah |
+| Golden Claymore | adult | [Golden Claymore over Biggoron's Sword](https://gamebanana.com/mods/442039) | sitton76 |
 
 ### Optional, not installed automatically
 

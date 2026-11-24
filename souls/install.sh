@@ -57,7 +57,7 @@ fetch_repo_file "dependencies.json" "$WORK/dependencies.json"
 python3 - "$WORK/dependencies.json" > "$WORK/list.tsv" <<'PY'
 import json, sys
 for p in json.load(open(sys.argv[1]))["packs"]:
-    print("\t".join([p["slug"], str(p["file"]), p["weapon"], p["name"], p["author"], str(p["gamebanana"])]))
+    print("\t".join([p["slug"], str(p["file"]), p["name"], p["name"], p["author"], str(p["gamebanana"])]))
 PY
 
 ok=0; failed=0
@@ -79,10 +79,10 @@ while IFS=$'\t' read -r slug file weapon name author gb; do
   while IFS= read -r -d '' f; do cp "$f" "$dest/"; found=1; done < <(find "$out" -type f \( -iname '*.o2r' -o -iname '*.otr' \) -print0)
   if [ "$found" = 1 ]; then
     printf '%s\nby %s\nhttps://gamebanana.com/mods/%s\n' "$name" "$author" "$gb" > "$dest/SOURCE.txt"
-    echo "  $weapon  <-  $name by $author"; ok=$((ok + 1))
+    echo "  $name by $author"; ok=$((ok + 1))
   else
     echo "  No .o2r/.otr inside: $name"; failed=$((failed + 1))
   fi
 done < "$WORK/list.tsv"
 rm -rf "$WORK"
-echo "Weapon skins: $ok installed, $failed failed. They live in $SOH/souls-skins and are used by the Souls build only."
+echo "Weapon packs: $ok installed, $failed failed. They live in $SOH/souls-skins and are used by the Souls build only."

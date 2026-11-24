@@ -386,13 +386,13 @@ extern "C" void SoulsCreator_DrawPreview(void* state) {
 
     Matrix_SetTranslateRotateYXZ(pos.x, pos.y, pos.z, &rot);
     Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
-    gSPSegment(POLY_OPA_DISP++, 0x04, sPreviewSegment + 0x3800);
-    gSPSegment(POLY_OPA_DISP++, 0x06, sPreviewSegment + 0x8800);
+    gSPSegment(POLY_OPA_DISP++, 0x04, (uintptr_t)(sPreviewSegment + 0x3800));
+    gSPSegment(POLY_OPA_DISP++, 0x06, (uintptr_t)(sPreviewSegment + 0x8800));
     gSPSetLights1(POLY_OPA_DISP++, lights);
     func_80093C80(sPreviewPlay);
     POLY_OPA_DISP = Gfx_SetFog2(POLY_OPA_DISP++, 0, 0, 0, 0, 997, 1000);
     func_8002EABC(&pos, &eye, &lightDir, gameState->gfxCtx);
-    gSPSegment(POLY_OPA_DISP++, 0x0C, gCullBackDList);
+    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)gCullBackDList);
     Player_DrawImpl(sPreviewPlay, sPreviewSkel.skeleton, sPreviewSkel.jointTable, sPreviewSkel.dListCount, 0,
                     PLAYER_TUNIC_KOKIRI, PLAYER_BOOTS_KOKIRI, 0, Player_OverrideLimbDrawPause, NULL, swordAndShield);
     CLOSE_DISPS(gameState->gfxCtx);
