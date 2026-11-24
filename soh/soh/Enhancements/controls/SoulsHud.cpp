@@ -28,6 +28,8 @@ extern void* gItemIcons[];
 extern const char* _gAmmoDigit0Tex[];
 }
 #include "soh/ShipUtils.h"
+#include "soh/ShipInit.hpp"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
 extern "C" {
 float OTRGetDimensionFromLeftEdge(float v);
 float OTRGetDimensionFromRightEdge(float v);
@@ -252,6 +254,19 @@ static SoulsTrail sHp, sMp;
 static int sPrevPieces = -1;
 static int sPieceFlash = 0;
 static int sPrevCapacity = 0;
+
+// A new save file starts with a clean HUD state (no false "new heart" flash from the previous file)
+static void ResetHudState() {
+    sHp = SoulsTrail();
+    sMp = SoulsTrail();
+    sPrevPieces = -1;
+    sPieceFlash = 0;
+    sPrevCapacity = 0;
+}
+static void RegisterSoulsHudReset() {
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnLoadGame>([](int32_t) { ResetHudState(); });
+}
+static RegisterShipInitFunc initSoulsHudReset(RegisterSoulsHudReset);
 
 // The part just lost stays for a moment, then drains. Returns the trail fraction.
 static float UpdateSoulsTrail(SoulsTrail& t, float cur, float drain) {

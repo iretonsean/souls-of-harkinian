@@ -51,6 +51,14 @@ void SoulsLoadout_SetPouchHeld(bool held);
 // quest item ids (QUEST_KOKIRI_EMERALD, QUEST_MEDALLION_FOREST, ...) to out and returns how many. Saved per file.
 int SoulsLoadout_QuestOrder(uint8_t* out, int max);
 
+// The player's own C-button items are kept while the loadout uses the buttons; the input layer writes only when true.
+bool SoulsLoadout_ButtonItemsStashed(void);
+// B holds a temporary minigame item (horseback archery, shooting gallery, Bombchu Bowling, fishing rod) or such a
+// minigame is on: the input layer leaves B and the C buttons alone.
+bool SoulsLoadout_TemporaryB(void);
+// SaveManager calls this on the copy of the save context it is about to write (void* = SaveContext*)
+void SoulsLoadout_PatchSaveCopy(void* saveContext);
+
 #ifdef __cplusplus
 }
 #endif

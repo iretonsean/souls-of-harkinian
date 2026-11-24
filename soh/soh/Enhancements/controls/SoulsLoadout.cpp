@@ -7,6 +7,7 @@
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <nlohmann/json.hpp>
 #include <vector>
+#include <mutex>
 #include <algorithm>
 #include "soh/SaveManager.h"
 #include "soh/ShipInit.hpp"
@@ -15,11 +16,14 @@
 extern "C" {
 #include "z64.h"
 #include "macros.h"
+#include "z64player.h"
+#include "functions.h"
 #include "variables.h"
 // Age tables of the pause menu (z_kaleido_scope_PAL.c)
 extern PlayState* gPlayState;
 extern u8 gItemAgeReqs[];
 extern u8 gEquipAgeReqs[][4];
+void Interface_LoadItemIcon1(PlayState* play, u16 button);
 }
 
 namespace {
@@ -29,7 +33,15 @@ int sCurrent[SL_KIND_COUNT] = {};
 uint32_t sLastUse[SL_KIND_COUNT] = {}, sLastSwitch[SL_KIND_COUNT] = {};
 bool sPouchHeld = false;
 std::vector<uint8_t> sQuestOrder; // stones and medallions in collection order
-bool sFilled = false; // the save has a loadout (loaded, or filled once)
+bool sFilled = false; // the save has a loadout (saved with the "filled" flag, or filled once)
+std::mutex sOrderMutex; // sQuestOrder is read by the save thread
+
+// The player's own B / C assignments, kept while Souls controls overwrite them (restored when Souls turns off, and
+// written into the save copy so the file keeps them)
+bool sStashed = false;
+uint8_t sStashItems[4] = {};
+uint8_t sStashSlots[3] = {};
+u8 sStashAge = 0;
 
 bool Valid(int kind) {
     return kind >= 0 && kind < SL_KIND_COUNT;
@@ -45,13 +57,13 @@ void ClearAll() {
 }
 
 // An item can be used at Link's current age (0xFF age requirement = any age)
-bool AgeOk(int req) {
+bool AgeOk(int req, int item = 0) {
     bool ok = req == 9 || req == gSaveContext.linkAge;
-    return GameInteractor_Should(VB_ITEM_MEETS_AGE_REQ, ok, 0);
+    return GameInteractor_Should(VB_ITEM_MEETS_AGE_REQ, ok, item);
 }
 
 bool ItemAgeOk(uint8_t item) {
-    return AgeOk(gItemAgeReqs[item]);
+    return AgeOk(gItemAgeReqs[item], item);
 }
 
 // The inventory slot item (for example the hookshot slot holds the hookshot or the longshot)
@@ -84,16 +96,15 @@ bool CanEquipRight(uint8_t item) {
     switch (item) {
         case ITEM_SWORD_KOKIRI:
             return OwnsEquip(EQUIP_TYPE_SWORD, EQUIP_VALUE_SWORD_KOKIRI) &&
-                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_SWORD][EQUIP_VALUE_SWORD_KOKIRI]);
+                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_SWORD][EQUIP_VALUE_SWORD_KOKIRI], item);
         case ITEM_SWORD_MASTER:
             return OwnsEquip(EQUIP_TYPE_SWORD, EQUIP_VALUE_SWORD_MASTER) &&
-                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_SWORD][EQUIP_VALUE_SWORD_MASTER]);
-        case ITEM_SWORD_BGS: // Biggoron Sword
-            return gSaveContext.bgsFlag != 0 && OwnsEquip(EQUIP_TYPE_SWORD, EQUIP_VALUE_SWORD_BIGGORON) &&
-                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_SWORD][EQUIP_VALUE_SWORD_BIGGORON]);
-        case ITEM_SWORD_KNIFE: // Giant's Knife (the Biggoron slot before the real sword is obtained)
-            return gSaveContext.bgsFlag == 0 && OwnsEquip(EQUIP_TYPE_SWORD, EQUIP_VALUE_SWORD_BIGGORON) &&
-                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_SWORD][EQUIP_VALUE_SWORD_BIGGORON]);
+                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_SWORD][EQUIP_VALUE_SWORD_MASTER], item);
+        case ITEM_SWORD_BGS: // Giant's Knife (bgsFlag 0) or Biggoron Sword: one slot, the game decides which
+            return OwnsEquip(EQUIP_TYPE_SWORD, EQUIP_VALUE_SWORD_BIGGORON) &&
+                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_SWORD][EQUIP_VALUE_SWORD_BIGGORON], item);
+        case ITEM_SWORD_KNIFE: // the broken Giant's Knife: not equippable
+            return false;
         case ITEM_HAMMER:
         case ITEM_STICK:
             return InInventory(item) && ItemAgeOk(item);
@@ -137,10 +148,10 @@ bool CanEquipPouch(uint8_t item) {
             return InInventory(item) && ItemAgeOk(item);
         case SOULS_ITEM_TOGGLE_IRON:
             return OwnsEquip(EQUIP_TYPE_BOOTS, EQUIP_VALUE_BOOTS_IRON) &&
-                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_BOOTS][EQUIP_VALUE_BOOTS_IRON]);
+                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_BOOTS][EQUIP_VALUE_BOOTS_IRON], item);
         case SOULS_ITEM_TOGGLE_HOVER:
             return OwnsEquip(EQUIP_TYPE_BOOTS, EQUIP_VALUE_BOOTS_HOVER) &&
-                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_BOOTS][EQUIP_VALUE_BOOTS_HOVER]);
+                   AgeOk(gEquipAgeReqs[EQUIP_TYPE_BOOTS][EQUIP_VALUE_BOOTS_HOVER], item);
     }
     // Masks and trade items: they share two inventory slots, so only the one held now counts as owned
     if (item >= ITEM_LETTER_ZELDA && item <= ITEM_CLAIM_CHECK) {
@@ -197,28 +208,141 @@ void AddToFirstFree(SoulsLoadoutKind kind, uint8_t item) {
     }
 }
 
-// One-time fill for a save without a loadout: sword -> right hand 1, C-button items sorted (the shield stays OoT's equipped shield)
+bool IsSwordItem(uint8_t item) {
+    return item == ITEM_SWORD_KOKIRI || item == ITEM_SWORD_MASTER || item == ITEM_SWORD_BGS;
+}
+
+// Put one equipped C-button item into the lists
+void FillItem(uint8_t item) {
+    if (item >= ITEM_NONE_FE) {
+        return;
+    }
+    if (item >= ITEM_BOW_ARROW_FIRE && item <= ITEM_BOW_ARROW_LIGHT) {
+        // The bow with a magic arrow: the loadout keeps the bow (left hand) and the arrow (arrow slot)
+        AddToFirstFree(SL_LEFT, ITEM_BOW);
+        item = (item == ITEM_BOW_ARROW_FIRE) ? ITEM_ARROW_FIRE
+                                             : (item == ITEM_BOW_ARROW_ICE ? ITEM_ARROW_ICE : ITEM_ARROW_LIGHT);
+    }
+    if (item == ITEM_SWORD_KNIFE) {
+        return;
+    }
+    SoulsLoadoutKind kind = (SoulsLoadoutKind)KindOfItem(item);
+    AddToFirstFree(kind, item);
+    if (kind == SL_SPELL) {
+        AddToFirstFree(SL_LEFT, SOULS_ITEM_CATALYST); // a spell needs the catalyst in a hand
+    }
+}
+
+// One-time fill for a save without a loadout: the swords and C-button items of both ages (the current age first;
+// its equips are the vanilla ones kept in the stash, the other age's are the ones the game keeps for the age switch).
+// The shield stays the equipped shield.
 void FillFromEquipment() {
     ClearAll();
-    uint8_t sword = gSaveContext.equips.buttonItems[0];
-    if (sword == ITEM_SWORD_KOKIRI || sword == ITEM_SWORD_MASTER || sword == ITEM_SWORD_BGS ||
-        sword == ITEM_SWORD_KNIFE) {
-        sSlots[SL_RIGHT][0] = sword;
-    }
-    for (int b = 1; b <= 3; b++) {
-        uint8_t item = gSaveContext.equips.buttonItems[b];
-        if (item >= ITEM_NONE_FE) {
-            continue;
+    for (int pass = 0; pass < 2; pass++) {
+        bool current = pass == 0;
+        uint8_t items[4];
+        if (current) {
+            for (int i = 0; i < 4; i++) {
+                items[i] = sStashed ? sStashItems[i] : gSaveContext.equips.buttonItems[i];
+            }
+        } else {
+            const ItemEquips& other = gSaveContext.linkAge == LINK_AGE_CHILD ? gSaveContext.adultEquips
+                                                                              : gSaveContext.childEquips;
+            for (int i = 0; i < 4; i++) {
+                items[i] = other.buttonItems[i];
+            }
         }
-        if (item >= ITEM_BOW_ARROW_FIRE && item <= ITEM_BOW_ARROW_LIGHT) {
-            // The bow with a magic arrow: the loadout keeps the bow (left hand) and the arrow (arrow slot)
-            AddToFirstFree(SL_LEFT, ITEM_BOW);
-            item = (item == ITEM_BOW_ARROW_FIRE) ? ITEM_ARROW_FIRE
-                                                 : (item == ITEM_BOW_ARROW_ICE ? ITEM_ARROW_ICE : ITEM_ARROW_LIGHT);
+        if (IsSwordItem(items[0])) {
+            AddToFirstFree(SL_RIGHT, items[0]);
         }
-        AddToFirstFree((SoulsLoadoutKind)KindOfItem(item), item);
+        for (int b = 1; b <= 3; b++) {
+            FillItem(items[b]);
+        }
     }
     sFilled = true;
+}
+
+bool BIsTemporary() {
+    uint8_t b = gSaveContext.equips.buttonItems[0];
+    bool normal = b == ITEM_SWORD_KOKIRI || b == ITEM_SWORD_MASTER || b == ITEM_SWORD_BGS || b == ITEM_SWORD_KNIFE ||
+                  b == ITEM_NONE;
+    if (!normal) {
+        return true; // bow, slingshot, bombchu, fishing rod
+    }
+    if (gPlayState == nullptr) {
+        return false;
+    }
+    Player* player = GET_PLAYER(gPlayState);
+    return gPlayState->shootingGalleryStatus > 0 || gSaveContext.minigameState == 1 ||
+           gPlayState->bombchuBowlingStatus != 0 || (player != nullptr && (player->stateFlags1 & PLAYER_STATE1_ON_HORSE)) ||
+           (gPlayState->sceneNum == SCENE_FISHING_POND && gPlayState->interfaceCtx.unk_260 != 0);
+}
+
+// An inventory-backed button assignment that is still valid (the bottle may be empty now, the item may be gone)
+void SanitizeVanilla(uint8_t* items, uint8_t* slots) {
+    for (int i = 0; i < 3; i++) {
+        uint8_t item = items[i + 1], slot = slots[i];
+        if (slot == SLOT_NONE || slot >= 24) {
+            if (item < ITEM_NONE_FE) {
+                items[i + 1] = ITEM_NONE;
+            }
+            slots[i] = SLOT_NONE;
+            continue;
+        }
+        uint8_t content = gSaveContext.inventory.items[slot];
+        if (content == ITEM_NONE) {
+            items[i + 1] = ITEM_NONE;
+            slots[i] = SLOT_NONE;
+        } else if (slot >= SLOT_BOTTLE_1 && slot <= SLOT_BOTTLE_4) {
+            items[i + 1] = content;
+        }
+    }
+}
+
+void CaptureVanilla() {
+    if (BIsTemporary()) {
+        return; // try again when the minigame is over
+    }
+    for (int i = 0; i < 4; i++) {
+        sStashItems[i] = gSaveContext.equips.buttonItems[i];
+    }
+    for (int i = 0; i < 3; i++) {
+        sStashSlots[i] = gSaveContext.equips.cButtonSlots[i];
+    }
+    sStashAge = gSaveContext.linkAge;
+    sStashed = true;
+}
+
+void RestoreVanilla() {
+    if (BIsTemporary()) {
+        return;
+    }
+    if (sStashAge == gSaveContext.linkAge) {
+        SanitizeVanilla(sStashItems, sStashSlots);
+        for (int i = 0; i < 3; i++) {
+            gSaveContext.equips.buttonItems[i + 1] = sStashItems[i + 1];
+            gSaveContext.equips.cButtonSlots[i] = sStashSlots[i];
+            if (gPlayState != nullptr) {
+                Interface_LoadItemIcon1(gPlayState, i + 1);
+            }
+        }
+        uint8_t sword = sStashItems[0];
+        if (IsSwordItem(sword) && gSaveContext.equips.buttonItems[0] != sword && gPlayState != nullptr) {
+            Player* player = GET_PLAYER(gPlayState);
+            if (player == nullptr || player->meleeWeaponState != 0 ||
+                (player->heldItemAction >= PLAYER_IA_SWORD_MASTER && player->heldItemAction <= PLAYER_IA_SWORD_BIGGORON)) {
+                return; // the sword is drawn: wait until it is away
+            }
+            int value = sword == ITEM_SWORD_KOKIRI ? EQUIP_VALUE_SWORD_KOKIRI
+                                                   : (sword == ITEM_SWORD_MASTER ? EQUIP_VALUE_SWORD_MASTER
+                                                                                 : EQUIP_VALUE_SWORD_BIGGORON);
+            gSaveContext.equips.buttonItems[0] = sword;
+            Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, value);
+            Interface_LoadItemIcon1(gPlayState, 0);
+            Player_SetEquipmentData(gPlayState, player);
+        }
+    }
+    sStashed = false;
 }
 
 const uint8_t kOrderItems[] = { QUEST_KOKIRI_EMERALD, QUEST_GORON_RUBY,      QUEST_ZORA_SAPPHIRE,
@@ -227,6 +351,7 @@ const uint8_t kOrderItems[] = { QUEST_KOKIRI_EMERALD, QUEST_GORON_RUBY,      QUE
 
 // Add stones / medallions that the file has but the order list does not (new ones go to the end)
 void UpdateQuestOrder() {
+    std::lock_guard<std::mutex> lock(sOrderMutex);
     for (uint8_t q : kOrderItems) {
         if (CHECK_QUEST_ITEM(q)) {
             if (std::find(sQuestOrder.begin(), sQuestOrder.end(), q) == sQuestOrder.end()) {
@@ -239,7 +364,13 @@ void UpdateQuestOrder() {
 }
 
 void Save(const SaveContext& saveContext, int sectionID, bool fullSave) {
-    SaveManager::Instance->SaveData("questOrder", nlohmann::json(sQuestOrder).dump());
+    std::vector<uint8_t> order;
+    {
+        std::lock_guard<std::mutex> lock(sOrderMutex);
+        order = sQuestOrder;
+    }
+    SaveManager::Instance->SaveData("questOrder", nlohmann::json(order).dump());
+    SaveManager::Instance->SaveData("filled", (int)sFilled);
     nlohmann::json lists = nlohmann::json::array();
     for (int k = 0; k < SL_KIND_COUNT; k++) {
         nlohmann::json one = nlohmann::json::array();
@@ -261,6 +392,8 @@ void Load() {
     std::string text;
     SaveManager::Instance->LoadData("questOrder", text, std::string());
     nlohmann::json order = nlohmann::json::parse(text.empty() ? "[]" : text, nullptr, false);
+    std::lock_guard<std::mutex> lock(sOrderMutex);
+    sQuestOrder.clear();
     if (!order.is_discarded() && order.is_array()) {
         for (auto& q : order) {
             if (q.is_number_integer()) {
@@ -277,12 +410,18 @@ void Load() {
             }
             for (int i = 0; i < kCap[k] && i < (int)lists[k].size(); i++) {
                 if (lists[k][i].is_number_integer()) {
-                    sSlots[k][i] = (uint8_t)lists[k][i].get<int>();
+                    int v = lists[k][i].get<int>();
+                    // Unknown ids (damaged or newer save) are cleared: icons and tables are indexed by the id
+                    if (v == ITEM_NONE || (v >= 0 && v <= ITEM_SWORD_KNIFE) || (v >= SOULS_ITEM_CATALYST && v <= SOULS_ITEM_EPONA)) {
+                        sSlots[k][i] = (uint8_t)v;
+                    }
                 }
             }
         }
-        sFilled = true;
     }
+    int filled = 0;
+    SaveManager::Instance->LoadData("filled", filled, 0);
+    sFilled = filled != 0; // lists without the flag (old versions, or saved before the fill) get the fill again
     SaveManager::Instance->LoadData("current", text, std::string());
     nlohmann::json cur = nlohmann::json::parse(text.empty() ? "[]" : text, nullptr, false);
     if (!cur.is_discarded() && cur.is_array()) {
@@ -296,8 +435,15 @@ void Load() {
 
 void Reset(bool isDebug) {
     ClearAll();
-    sQuestOrder.clear();
+    {
+        std::lock_guard<std::mutex> lock(sOrderMutex);
+        sQuestOrder.clear();
+    }
     sFilled = false;
+    sStashed = false;
+    for (int k = 0; k < SL_KIND_COUNT; k++) {
+        sLastUse[k] = sLastSwitch[k] = 0;
+    }
 }
 
 void RegisterLoadout() {
@@ -310,17 +456,26 @@ void RegisterLoadout() {
     SaveManager::Instance->AddInitFunction(Reset);
     SaveManager::Instance->AddSaveFunction("soulsLoadout", 1, Save, true, SECTION_PARENT_NONE);
     SaveManager::Instance->AddLoadFunction("soulsLoadout", 1, Load);
-    // After the file is loaded: a save without the section gets its one-time fill
-    // Watch the stones and medallions (every frame, also with Souls controls off)
+    // Every frame in play: watch the stones and medallions (also with Souls controls off); with Souls controls on,
+    // keep the player's own button items, and give a save without a loadout its one-time fill (also when the switch
+    // is turned on in the middle of a session); with them off, give the button items back.
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([]() {
-        if (gPlayState != nullptr) {
-            UpdateQuestOrder();
+        if (gPlayState == nullptr) {
+            return;
         }
-    });
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnLoadGame>([](int32_t fileNum) {
-        UpdateQuestOrder(); // old saves: the stones and medallions they have, in id order
-        if (!sFilled && SoulsLoadout_IsEnabled()) {
-            FillFromEquipment();
+        UpdateQuestOrder();
+        if (SoulsLoadout_IsEnabled()) {
+            if (sStashed && sStashAge != gSaveContext.linkAge) {
+                sStashed = false; // age change: the game loaded the other age's buttons
+            }
+            if (!sStashed) {
+                CaptureVanilla();
+            }
+            if (sStashed && !sFilled) {
+                FillFromEquipment();
+            }
+        } else if (sStashed) {
+            RestoreVanilla();
         }
     });
 }
@@ -394,7 +549,7 @@ extern "C" void SoulsLoadout_Cycle(SoulsLoadoutKind kind, int dir) {
             if (sSlots[kind][i] != ITEM_NONE && (pass == 1 || SoulsLoadout_CanEquip(kind, sSlots[kind][i]))) {
                 if (i != cur) {
                     sCurrent[kind] = i;
-                    sLastSwitch[kind] = (uint32_t)gSaveContext.ship.stats.playTimer;
+                    sLastSwitch[kind] = gPlayState != nullptr ? gPlayState->gameplayFrames : 0;
                 }
                 return;
             }
@@ -403,6 +558,7 @@ extern "C" void SoulsLoadout_Cycle(SoulsLoadoutKind kind, int dir) {
 }
 extern "C" int SoulsLoadout_QuestOrder(uint8_t* out, int max) {
     int n = 0;
+    std::lock_guard<std::mutex> lock(sOrderMutex);
     for (uint8_t q : sQuestOrder) {
         if (n < max) {
             out[n++] = q;
@@ -411,7 +567,7 @@ extern "C" int SoulsLoadout_QuestOrder(uint8_t* out, int max) {
     return n;
 }
 extern "C" bool SoulsLoadout_HasCatalyst(void) {
-    return SoulsLoadout_Current(SL_LEFT) == SOULS_ITEM_CATALYST || SoulsLoadout_Current(SL_RIGHT) == SOULS_ITEM_CATALYST;
+    return SoulsLoadout_Current(SL_LEFT) == SOULS_ITEM_CATALYST; // the catalyst only goes in the left hand
 }
 extern "C" bool SoulsLoadout_CanEquip(SoulsLoadoutKind kind, uint8_t item) {
     if (!Valid(kind) || item == ITEM_NONE) {
@@ -444,7 +600,7 @@ extern "C" uint32_t SoulsLoadout_LastSwitchFrame(SoulsLoadoutKind kind) {
 }
 extern "C" void SoulsLoadout_NoteUse(SoulsLoadoutKind kind) {
     if (Valid(kind)) {
-        sLastUse[kind] = (uint32_t)gSaveContext.ship.stats.playTimer;
+        sLastUse[kind] = gPlayState != nullptr ? gPlayState->gameplayFrames : 0;
     }
 }
 extern "C" bool SoulsLoadout_PouchHeld(void) {
@@ -452,4 +608,30 @@ extern "C" bool SoulsLoadout_PouchHeld(void) {
 }
 extern "C" void SoulsLoadout_SetPouchHeld(bool held) {
     sPouchHeld = held;
+}
+
+extern "C" bool SoulsLoadout_ButtonItemsStashed(void) {
+    return sStashed;
+}
+extern "C" bool SoulsLoadout_TemporaryB(void) {
+    return BIsTemporary();
+}
+// The save file keeps the player's own C buttons, not the ones the loadout puts there each frame
+extern "C" void SoulsLoadout_PatchSaveCopy(void* saveContext) {
+    SaveContext* copy = (SaveContext*)saveContext;
+    if (copy == nullptr || !sStashed || !SoulsLoadout_IsEnabled() || sStashAge != copy->linkAge) {
+        return;
+    }
+    uint8_t items[4], slots[3];
+    for (int i = 0; i < 4; i++) {
+        items[i] = sStashItems[i];
+    }
+    for (int i = 0; i < 3; i++) {
+        slots[i] = sStashSlots[i];
+    }
+    SanitizeVanilla(items, slots);
+    for (int i = 0; i < 3; i++) {
+        copy->equips.buttonItems[i + 1] = items[i + 1];
+        copy->equips.cButtonSlots[i] = slots[i];
+    }
 }

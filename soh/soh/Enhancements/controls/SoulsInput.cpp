@@ -15,7 +15,9 @@
 //   C-down  = the left-hand tool (Slingshot, Bow, Hookshot, Longshot, Boomerang) or the spell if it holds the catalyst
 //   B       = the sword of the right hand (the equipped sword is switched to match)
 //   R       = guard (L2)
-// R1 / R2 press the right hand (B for a sword, C-right for a tool or spell); holding R2 or R1 charges the spin attack.
+// R1 presses the right hand (B for a sword, C-right for a tool or spell); holding it charges the spin attack.
+// R2: a tap with a sword drawn or sheathed is the game's jump slash (the attack the A button does while Z-targeting
+// with a sword; it works without a target); holding R2 acts as R1 (swing, then the spin charge).
 // L1 presses the left-hand item (C-down: tool or spell). L2 guards with the equipped shield (the game's R button;
 // the shield is gear on the Equipment page, not a slot). D-pad right / left / up / down switch the
 // right hand / left hand / spell / quick item. Triangle is A; while it is held the pouch shows and the D-pad does not
@@ -31,6 +33,7 @@
 // Cross confirms (A), Circle goes back (B), and holding R1 (B) while pressing a D-pad direction
 // assigns the highlighted item to that C button.
 #include <libultraship/bridge/consolevariablebridge.h>
+#include <chrono>
 #include "SoulsInput.h"
 #include "SoulsLoadout.h"
 #include "soh/OTRGlobals.h"
@@ -47,6 +50,9 @@ extern "C" {
 extern PlayState* gPlayState;
 extern u8 gItemSlots[];
 void Interface_LoadItemIcon1(PlayState* play, u16 button);
+void Player_UseItem(PlayState* play, Player* player, s32 item);
+int Player_CanUpdateItems(Player* player);
+void func_8083BA90(PlayState* play, Player* player, s32 arg2, f32 xzVelocity, f32 yVelocity); // start a jump slash
 }
 
 // Cross pressed in play: jump on the next item-button check (within 2 gameplay frames)
@@ -116,13 +122,58 @@ static u8 UsableCurrent(SoulsLoadoutKind kind) {
 // Input state (all in play)
 static u16 sPrevDpad = 0;
 static bool sPrevR1 = false, sPrevL1 = false, sPrevSquare = false;
+static bool sPrevR2 = false;
+static std::chrono::steady_clock::time_point sR2Start;
+static bool sSlashPending = false; // R2 tapped: jump slash on the next item-button check
+static u32 sSlashFrame = 0;
+static bool sForceAttack = false; // press the right-hand attack for a few game frames
+static u32 sForceAttackFrame = 0;
+static const int kR2HoldMs = 160; // a R2 press shorter than this is a tap
+
+// The player is in the middle of using an item (a bottle being drunk, an item change, an item cutscene). The game's
+// item code reads the C buttons then (the bottle is emptied in cButtonSlots[heldItemButton - 1]), so they stay as they are.
+static bool ItemInUse(Player* player) {
+    if (player == nullptr) {
+        return false;
+    }
+    return (player->heldItemAction >= PLAYER_IA_BOTTLE && player->heldItemAction <= PLAYER_IA_BOTTLE_FAIRY) ||
+           (player->itemAction >= PLAYER_IA_BOTTLE && player->itemAction <= PLAYER_IA_BOTTLE_FAIRY) ||
+           (player->stateFlags1 & (PLAYER_STATE1_START_CHANGING_HELD_ITEM | PLAYER_STATE1_GETTING_ITEM));
+}
+
+static bool ItemInUseNow() {
+    return gPlayState != nullptr && ItemInUse(GET_PLAYER(gPlayState));
+}
+
+static u32 GameFrame() {
+    return gPlayState != nullptr ? gPlayState->gameplayFrames : 0;
+}
 
 // Play layout. Returns the N64 buttons the game gets.
 static u16 SoulsInput_Play(u16 in) {
     // Cross (Modifier 2) is handled by the caller; the touchpad (L) passes through as the minimap toggle
     u16 out = in & ~(DPAD_BITS | BTN_B | BTN_R | BTN_Z | BTN_ALL_C | BTN_CUSTOM_MODIFIER2);
     bool triangle = (in & BTN_A) && !(in & BTN_SOULS_MOD1);
-    bool r1 = (in & BTN_B) || (in & BTN_CRIGHT); // R1 or R2: right-hand attack
+    bool r2 = (in & BTN_CRIGHT) != 0;
+    auto now = std::chrono::steady_clock::now();
+    if (r2 && !sPrevR2) {
+        sR2Start = now;
+    }
+    bool r2Held = r2 && std::chrono::duration_cast<std::chrono::milliseconds>(now - sR2Start).count() >= kR2HoldMs;
+    bool temporaryB = SoulsLoadout_TemporaryB(); // a minigame item is on B: R1 and R2 both press B
+    bool r1 = (in & BTN_B) || r2Held || (r2 && temporaryB) || (sForceAttack && GameFrame() - sForceAttackFrame <= 8);
+    if (!r2 && sPrevR2 && !temporaryB &&
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - sR2Start).count() < kR2HoldMs) {
+        // R2 tap: the jump slash with a sword, else the same as R1
+        if (IsSword(UsableCurrent(SL_RIGHT))) {
+            sSlashPending = true;
+            sSlashFrame = GameFrame();
+        } else {
+            sForceAttack = true;
+            sForceAttackFrame = GameFrame();
+        }
+    }
+    sPrevR2 = r2;
     bool l1 = (in & BTN_R) != 0;  // L1
     bool square = (in & BTN_CLEFT) != 0;
     bool l2 = (in & BTN_CDOWN) != 0;  // L2
@@ -131,7 +182,7 @@ static u16 SoulsInput_Play(u16 in) {
     // D-pad: switch hands, spell, quick item (not while Triangle is held: that is the pouch)
     u16 pressed = (in & DPAD_BITS) & ~sPrevDpad;
     sPrevDpad = in & DPAD_BITS;
-    if (!triangle) {
+    if (!triangle && !ItemInUseNow()) {
         if (pressed & BTN_DRIGHT) SoulsLoadout_Cycle(SL_RIGHT, 1);
         if (pressed & BTN_DLEFT) SoulsLoadout_Cycle(SL_LEFT, 1);
         if (pressed & BTN_DUP) SoulsLoadout_Cycle(SL_SPELL, 1);
@@ -142,7 +193,9 @@ static u16 SoulsInput_Play(u16 in) {
     u8 left = UsableCurrent(SL_LEFT);
 
     // Right hand: a sword is the game's B button, any other item (or the spell) is on C-right
-    if (r1 && right != ITEM_NONE) {
+    if (r1 && temporaryB) {
+        out |= BTN_B; // horseback archery, shooting galleries, Bombchu Bowling, fishing rod: B is the minigame item
+    } else if (r1 && right != ITEM_NONE) {
         out |= IsSword(right) ? BTN_B : BTN_CRIGHT;
         if (!sPrevR1) SoulsLoadout_NoteUse(SL_RIGHT);
     }
@@ -193,7 +246,8 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     }
     SoulsLoadout_SetPouchHeld(false);
     sPrevDpad = in & DPAD_BITS;
-    sPrevR1 = sPrevL1 = sPrevSquare = false;
+    sPrevR1 = sPrevL1 = sPrevSquare = sPrevR2 = false;
+    sSlashPending = false;
 
     if (SoulsInput_InOcarina()) {
         // The ocarina: the D-pad plays the C notes, Triangle is A
@@ -240,6 +294,31 @@ static void RegisterSoulsJump() {
         s32* item = va_arg(args, s32*);
         (void)i;
         (void)player;
+        if (sSlashPending) {
+            if (gPlayState == nullptr || GameFrame() - sSlashFrame > 4) {
+                sSlashPending = false;
+            } else if (*item >= ITEM_NONE_FE) {
+                bool ground = (player->actor.bgCheckFlags & 1) != 0;
+                bool blocked = (player->stateFlags1 & (PLAYER_STATE1_SHIELDING | PLAYER_STATE1_CHARGING_SPIN_ATTACK |
+                                                       PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_IN_WATER |
+                                                       PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_HANGING_OFF_LEDGE |
+                                                       PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_FIRST_PERSON |
+                                                       PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_IN_CUTSCENE |
+                                                       PLAYER_STATE1_START_CHANGING_HELD_ITEM)) ||
+                               (player->stateFlags3 & PLAYER_STATE3_MIDAIR) || player->meleeWeaponState != 0;
+                if (ground && !blocked && Player_CanUpdateItems(player)) {
+                    sSlashPending = false;
+                    if (Player_GetMeleeWeaponHeld(player) != 0) {
+                        func_8083BA90(gPlayState, player, PLAYER_MWA_JUMPSLASH_START, 5.0f, 5.0f);
+                    } else {
+                        // The sword is sheathed: the plain attack draws it and swings
+                        sForceAttack = true;
+                        sForceAttackFrame = GameFrame();
+                    }
+                    return;
+                }
+            }
+        }
         if (!sJumpPending) {
             return;
         }
@@ -286,6 +365,10 @@ static RegisterShipInitFunc initSoulsJumpReset(RegisterSoulsJumpReset, { CVAR_SO
 // MARK: - Loadout -> the game's button slots (every player update)
 
 static void SetButton(int button, u8 item, u8 slot) {
+    if (item < ITEM_NONE_FE && (slot == SLOT_NONE || slot >= 24)) {
+        item = ITEM_NONE; // the game writes items[cButtonSlots[x]]: a real item always needs a real slot
+        slot = SLOT_NONE;
+    }
     gSaveContext.equips.buttonItems[button] = item;
     gSaveContext.equips.cButtonSlots[button - 1] = slot;
 }
@@ -368,14 +451,6 @@ static void EquipSword(PlayState* play, Player* player, u8 sword) {
         gSaveContext.swordHealth = 8;
     }
     Interface_LoadItemIcon1(play, 0);
-    // A drawn sword changes into the new one
-    if (player->heldItemAction >= PLAYER_IA_SWORD_MASTER && player->heldItemAction <= PLAYER_IA_SWORD_BIGGORON) {
-        s8 action = sword == ITEM_SWORD_KOKIRI ? PLAYER_IA_SWORD_KOKIRI
-                                               : (sword == ITEM_SWORD_MASTER ? PLAYER_IA_SWORD_MASTER : PLAYER_IA_SWORD_BIGGORON);
-        player->heldItemId = sword;
-        player->heldItemAction = action;
-        player->itemAction = action;
-    }
     Player_SetEquipmentData(play, player);
 }
 
@@ -385,6 +460,11 @@ static void SyncLoadout() {
     }
     Player* player = GET_PLAYER(gPlayState);
     if (player == nullptr) {
+        return;
+    }
+    // The player's own buttons are kept first; during minigames (B holds a temporary item) and while an item is in
+    // use (a bottle being drunk) the buttons are left alone
+    if (!SoulsLoadout_ButtonItemsStashed() || SoulsLoadout_TemporaryB() || ItemInUse(player)) {
         return;
     }
     // The hookshot slot turns into the longshot when it is upgraded
@@ -404,7 +484,14 @@ static void SyncLoadout() {
     u8 left = UsableCurrent(SL_LEFT);
     if (!busy) {
         if (IsSword(right) && gSaveContext.equips.buttonItems[0] != right) {
-            EquipSword(gPlayState, player, right);
+            if (player->heldItemAction >= PLAYER_IA_SWORD_MASTER && player->heldItemAction <= PLAYER_IA_SWORD_BIGGORON) {
+                // A drawn sword: put it away first (the game's own item change), then switch the sword
+                if (player->heldItemAction == player->itemAction) {
+                    Player_UseItem(gPlayState, player, ITEM_NONE);
+                }
+            } else {
+                EquipSword(gPlayState, player, right);
+            }
         }
     }
 

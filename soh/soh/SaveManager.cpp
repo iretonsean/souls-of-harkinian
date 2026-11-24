@@ -1305,6 +1305,8 @@ void SaveManager::SaveFileThreaded(int fileNum, const SaveContext& saveContext, 
 
 // SaveSection creates a copy of gSaveContext to prevent mid-save data modification, and passes its reference to
 // SaveFileThreaded This should never be called with threaded == false except during file creation
+extern "C" void SoulsLoadout_PatchSaveCopy(void* saveContext);
+
 void SaveManager::SaveSection(int fileNum, int sectionID, bool threaded) {
     // Don't save in Boss rush.
     if (fileNum == 0xFF || fileNum == 0xFE) {
@@ -1317,6 +1319,7 @@ void SaveManager::SaveSection(int fileNum, int sectionID, bool threaded) {
     }
 
     auto saveContext = std::make_shared<SaveContext>(gSaveContext);
+    SoulsLoadout_PatchSaveCopy(saveContext.get()); // Souls: the file keeps the player's own C buttons
     if (threaded) {
         smThreadPool->detach_task(
             [this, fileNum, saveContext, sectionID] { SaveFileThreaded(fileNum, *saveContext, sectionID); });
