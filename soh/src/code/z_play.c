@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/Enhancements/controls/SoulsEquipPage.h"
 #include "vt.h"
 
 #include <string.h>
@@ -1289,7 +1290,8 @@ void Play_DrawOverlayElements(PlayState* play) {
         KaleidoScopeCall_Draw(play);
     }
 
-    if (gSaveContext.gameMode == GAMEMODE_NORMAL) {
+    // Souls of Harkinian: the Equipment page is a full screen of its own (no hearts, buttons or Return / Save labels)
+    if (gSaveContext.gameMode == GAMEMODE_NORMAL && !SoulsEquipPage_Shown(play)) {
         Interface_Draw(play);
     }
 

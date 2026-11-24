@@ -168,10 +168,14 @@ void KaleidoScope_DrawPlayerWork(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Souls of Harkinian: the Link preview of the Equipment page, drawn in screen space (320x240 units) from the frame
-// buffer the pause screen draws him into (the old page draws the same buffer as a quad on its own page).
+// Souls of Harkinian: the Link preview of the Equipment page, drawn in screen space (units of the 320x240 screen; x
+// may be negative on a wide screen) from the frame buffer the pause screen draws him into. Only the upper part of the
+// buffer (head to belt) is shown, centred in the box.
 void KaleidoScope_DrawPauseLink2D(PlayState* play, s32 x, s32 y, s32 w, s32 h) {
     PauseContext* pauseCtx = &play->pauseCtx;
+    const f32 crop = 0.58f; // the part of the buffer's height that is shown
+    s32 dw = (s32)(h * PAUSE_EQUIP_PLAYER_WIDTH / (PAUSE_EQUIP_PLAYER_HEIGHT * crop));
+    s32 dx = x + (w - dw) / 2;
 
     OPEN_DISPS(play->state.gfxCtx);
 
@@ -189,16 +193,18 @@ void KaleidoScope_DrawPauseLink2D(PlayState* play, s32 x, s32 y, s32 w, s32 h) {
     gDPLoadTile(POLY_OPA_DISP++, G_TX_LOADTILE, 0, 0, (PAUSE_EQUIP_PLAYER_WIDTH - 1) << 2, (32 - 1) << 2);
     gDPSetTextureImageFB(POLY_OPA_DISP++, G_IM_FMT_RGBA, G_IM_SIZ_16b, PAUSE_EQUIP_PLAYER_WIDTH,
                          gPauseLinkFrameBuffer);
-    gSPWideTextureRectangle(POLY_OPA_DISP++, x << 2, y << 2, (x + w) << 2, (y + h) << 2, G_TX_RENDERTILE, 0, 0,
-                            (PAUSE_EQUIP_PLAYER_WIDTH << 10) / w, (32 << 10) / h);
+    gSPWideTextureRectangle(POLY_OPA_DISP++, dx << 2, y << 2, (dx + dw) << 2, (y + h) << 2, G_TX_RENDERTILE, 0, 0,
+                            (PAUSE_EQUIP_PLAYER_WIDTH << 10) / dw, (s32)((32 << 10) * crop) / h);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
 // Souls of Harkinian: the Souls Equipment page draws its slots in 2D (SoulsEquipPage_Draw). OoT keeps the page frame
-// and Link; Link goes into the frame buffer here, and is drawn on the old page position only while the page turns.
+// and Link; while the page is still, Link goes into the bigger frame buffer (shown by the page); while it turns, he is
+// drawn on the old page position.
 static void KaleidoScope_DrawEquipmentSouls(PlayState* play) {
     PauseContext* pauseCtx = &play->pauseCtx;
+    bool shown = SoulsEquipPage_Shown(play);
 
     OPEN_DISPS(play->state.gfxCtx);
 
@@ -211,7 +217,7 @@ static void KaleidoScope_DrawEquipmentSouls(PlayState* play) {
     gSPSegment(POLY_OPA_DISP++, 0x0A, pauseCtx->nameSegment);
     gSPSegment(POLY_OPA_DISP++, 0x0B, play->interfaceCtx.mapSegment);
 
-    if (!SoulsEquipPage_Shown(play)) {
+    if (!shown) {
         Gfx_SetupDL_42Opa(play->state.gfxCtx);
         KaleidoScope_DrawEquipmentImage(play, pauseCtx->playerSegment, PAUSE_EQUIP_PLAYER_WIDTH,
                                         PAUSE_EQUIP_PLAYER_HEIGHT);

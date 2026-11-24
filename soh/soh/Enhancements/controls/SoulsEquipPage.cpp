@@ -10,6 +10,7 @@
 // Buttons (menu layout of SoulsInput): D-pad / stick move, Cross = Equip / open, Triangle = Remove, Circle = Back.
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -26,6 +27,7 @@ extern "C" {
 #include "regs.h"
 #include "textures/icon_item_24_static/icon_item_24_static.h"
 #include "textures/parameter_static/parameter_static.h"
+#include "textures/title_static/title_static.h"
 extern u8 gEquipAgeReqs[][4];
 int16_t OTRGetRectDimensionFromLeftEdge(float v);
 int16_t OTRGetRectDimensionFromRightEdge(float v);
@@ -546,19 +548,20 @@ void Move(int dir) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Drawing helpers (320x240 screen space, like the character creator)
-
-const float kText = 0.56f;
-const int kSlot = 17, kGap = 3; // slot square and the space between slots
-
-} // namespace
-
+// Drawing (the layout of the web prototype: 426 x 240 units, anchored to the left edge of the wide screen)
+//
 // The drawing code is outside the anonymous namespace: OPEN_DISPS declares frame interpolation functions that
 // must have C linkage.
-static void UiRect(GraphicsContext* gfx, int x, int y, int w, int h, int r, int g, int b, int a, bool wide = false) {
+} // namespace
+
+static int sOx = 0; // left edge of the screen in game units (0 on 4:3, about -53 on 16:9)
+
+static void FillQ(GraphicsContext* gfx, float x, float y, float w, float h, int r, int g, int b, int a) {
     if (a <= 0 || w <= 0 || h <= 0) {
         return;
     }
+    int x0 = (int)lroundf((x + sOx) * 4), y0 = (int)lroundf(y * 4);
+    int x1 = (int)lroundf((x + w + sOx) * 4), y1 = (int)lroundf((y + h) * 4);
     OPEN_DISPS(gfx);
     gDPPipeSync(POLY_OPA_DISP++);
     gSPClearGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BOTH | G_FOG | G_LIGHTING | G_TEXTURE_GEN |
@@ -569,34 +572,77 @@ static void UiRect(GraphicsContext* gfx, int x, int y, int w, int h, int r, int 
                     G_AC_NONE | G_ZS_PIXEL | G_RM_CLD_SURF | G_RM_CLD_SURF2);
     gDPSetCombineMode(POLY_OPA_DISP++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, r, g, b, a);
-    if (wide) {
-        gDPFillWideRectangle(POLY_OPA_DISP++, x, y, x + w, y + h);
-    } else {
-        gDPFillRectangle(POLY_OPA_DISP++, x, y, x + w, y + h); // one-cycle rectangles end exclusive
-    }
+    // gDPFillWideRectangle with the coordinates already in quarter units
+    Gfx* g0 = POLY_OPA_DISP++;
+    Gfx* g1 = POLY_OPA_DISP++;
+    g0->words.w0 = _SHIFTL(G_FILLWIDERECT, 24, 8) | _SHIFTL(x1, 0, 24);
+    g0->words.w1 = _SHIFTL(y1, 0, 24);
+    g1->words.w0 = _SHIFTL(x0, 0, 24);
+    g1->words.w1 = _SHIFTL(y0, 0, 24);
     CLOSE_DISPS(gfx);
 }
 
-// Draws a line of text and returns its width in pixels
-static int UiText(GraphicsContext* gfx, const char* text, int x, int y, int r, int g, int b, float scale) {
+// A frame of thickness t drawn inside the box
+static void Ring(GraphicsContext* gfx, float x, float y, float w, float h, float t, int r, int g, int b, int a) {
+    FillQ(gfx, x, y, w, t, r, g, b, a);
+    FillQ(gfx, x, y + h - t, w, t, r, g, b, a);
+    FillQ(gfx, x, y + t, t, h - 2 * t, r, g, b, a);
+    FillQ(gfx, x + w - t, y + t, t, h - 2 * t, r, g, b, a);
+}
+
+static void Disc(GraphicsContext* gfx, float cx, float cy, float rad, int r, int g, int b, int a) {
+    for (float dy = -rad; dy < rad; dy += 0.5f) {
+        float yy = dy + 0.25f;
+        float hw = sqrtf(std::max(0.0f, rad * rad - yy * yy));
+        FillQ(gfx, cx - hw, cy + dy, 2 * hw, 0.5f, r, g, b, a);
+    }
+}
+
+// Text in the game's font at the prototype's scale; returns the advance in units
+static float TextW(const char* text, float scale) {
+    float w = 0;
+    for (const char* c = text; *c != '\0'; c++) {
+        w += Ship_GetCharFontWidth((u8)*c) * scale;
+    }
+    return w;
+}
+
+static float Text(GraphicsContext* gfx, const char* text, float x, float y, int r, int g, int b, float scale,
+                  bool shadow = true) {
     OPEN_DISPS(gfx);
     Gfx_SetupDL_39Opa(gfx);
     gDPSetCombineLERP(POLY_OPA_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0, PRIMITIVE,
                       ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 0);
-    CLOSE_DISPS(gfx);
-    return Interface_DrawTextLine(gfx, (char*)text, x, y, r, g, b, 255, scale, true);
-}
-
-static int TextWidth(const char* text, float scale) {
-    int width = 0;
+    int sz = (int)lroundf(16.0f * scale * 4); // quarter units
+    int texScale = (int)(1024.0f / scale);
+    float cx = x;
     for (const char* c = text; *c != '\0'; c++) {
-        width += (uint16_t)(Ship_GetCharFontWidth((u8)*c) * (R_TEXT_CHAR_SCALE / 100.0f) * scale);
+        if (*c != ' ') {
+            void* tex = Ship_GetCharFontTexture((u8)*c);
+            int xq = (int)lroundf((cx + sOx) * 4), yq = (int)lroundf(y * 4);
+            gDPPipeSync(POLY_OPA_DISP++);
+            gDPLoadTextureBlock_4b(POLY_OPA_DISP++, tex, G_IM_FMT_I, FONT_CHAR_TEX_WIDTH, FONT_CHAR_TEX_HEIGHT, 0,
+                                   G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
+                                   G_TX_NOLOD, G_TX_NOLOD);
+            if (shadow) {
+                int o = (int)lroundf(0.8f * 4);
+                gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 0, 0, 0, 255);
+                gSPWideTextureRectangle(POLY_OPA_DISP++, xq + o, yq + o, xq + o + sz, yq + o + sz, G_TX_RENDERTILE, 0,
+                                        0, texScale, texScale);
+                gDPPipeSync(POLY_OPA_DISP++);
+            }
+            gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, r, g, b, 255);
+            gSPWideTextureRectangle(POLY_OPA_DISP++, xq, yq, xq + sz, yq + sz, G_TX_RENDERTILE, 0, 0, texScale,
+                                    texScale);
+        }
+        cx += Ship_GetCharFontWidth((u8)*c) * scale;
     }
-    return width;
+    CLOSE_DISPS(gfx);
+    return TextW(text, scale);
 }
 
-static std::vector<std::string> WrapText(const char* text, int maxWidth, float scale) {
+static std::vector<std::string> WrapText(const char* text, float maxWidth, float scale) {
     std::vector<std::string> lines;
     std::string line, word;
     std::string all = std::string(text) + " ";
@@ -606,7 +652,7 @@ static std::vector<std::string> WrapText(const char* text, int maxWidth, float s
             continue;
         }
         std::string trial = line.empty() ? word : line + " " + word;
-        if (!line.empty() && TextWidth(trial.c_str(), scale) > maxWidth) {
+        if (!line.empty() && TextW(trial.c_str(), scale) > maxWidth) {
             lines.push_back(line);
             line = word;
         } else {
@@ -620,14 +666,64 @@ static std::vector<std::string> WrapText(const char* text, int maxWidth, float s
     return lines;
 }
 
-// A dark panel with a thin light frame
-static void UiPanel(GraphicsContext* gfx, int x, int y, int w, int h) {
-    UiRect(gfx, x - 1, y - 1, w + 2, h + 2, 120, 135, 165, 235);
-    UiRect(gfx, x, y, w, h, 8, 12, 24, 232);
+// OoT's file select window (gFileSelWindow1..20Tex: a 240 x 160 sheet of 4 x 5 tiles), stretched as a nine-patch
+static void Window(GraphicsContext* gfx, float x, float y, float w, float h) {
+    static const void* const kTex[20] = {
+        gFileSelWindow1Tex,  gFileSelWindow2Tex,  gFileSelWindow3Tex,  gFileSelWindow4Tex,  gFileSelWindow5Tex,
+        gFileSelWindow6Tex,  gFileSelWindow7Tex,  gFileSelWindow8Tex,  gFileSelWindow9Tex,  gFileSelWindow10Tex,
+        gFileSelWindow11Tex, gFileSelWindow12Tex, gFileSelWindow13Tex, gFileSelWindow14Tex, gFileSelWindow15Tex,
+        gFileSelWindow16Tex, gFileSelWindow17Tex, gFileSelWindow18Tex, gFileSelWindow19Tex, gFileSelWindow20Tex,
+    };
+    static const int kColW[4] = { 64, 64, 64, 48 };
+    const float us[4] = { 0, 16, 224, 240 }, vs[4] = { 0, 26, 146, 160 };
+    const float xs[4] = { x, x + 8, x + w - 8, x + w }, ys[4] = { y, y + 13, y + h - 7, y + h };
+    FillQ(gfx, x + 3, y + 3, w - 6, h - 6, 10, 10, 12, 215); // keeps the pages behind from showing through
+    OPEN_DISPS(gfx);
+    Gfx_SetupDL_39Opa(gfx);
+    gDPSetCombineMode(POLY_OPA_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 120, 124, 134, 255);
+    for (int ty = 0; ty < 5; ty++) {
+        float tv0 = ty * 32.0f, tv1 = tv0 + 32;
+        float tu0 = 0;
+        for (int tx = 0; tx < 4; tx++) {
+            float tu1 = tu0 + kColW[tx];
+            gDPPipeSync(POLY_OPA_DISP++);
+            gDPLoadTextureBlock(POLY_OPA_DISP++, (void*)kTex[ty * 4 + tx], G_IM_FMT_IA, G_IM_SIZ_16b, kColW[tx], 32, 0,
+                                G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
+                                G_TX_NOLOD, G_TX_NOLOD);
+            for (int pj = 0; pj < 3; pj++) {
+                float v0 = std::max(tv0, vs[pj]), v1 = std::min(tv1, vs[pj + 1]);
+                if (v0 >= v1) {
+                    continue;
+                }
+                for (int pi = 0; pi < 3; pi++) {
+                    float u0 = std::max(tu0, us[pi]), u1 = std::min(tu1, us[pi + 1]);
+                    if (u0 >= u1) {
+                        continue;
+                    }
+                    float kx = (xs[pi + 1] - xs[pi]) / (us[pi + 1] - us[pi]);
+                    float ky = (ys[pj + 1] - ys[pj]) / (vs[pj + 1] - vs[pj]);
+                    float dx0 = xs[pi] + (u0 - us[pi]) * kx, dx1 = xs[pi] + (u1 - us[pi]) * kx;
+                    float dy0 = ys[pj] + (v0 - vs[pj]) * ky, dy1 = ys[pj] + (v1 - vs[pj]) * ky;
+                    int xq0 = (int)lroundf((dx0 + sOx) * 4), xq1 = (int)lroundf((dx1 + sOx) * 4);
+                    int yq0 = (int)lroundf(dy0 * 4), yq1 = (int)lroundf(dy1 * 4);
+                    if (xq1 <= xq0 || yq1 <= yq0) {
+                        continue;
+                    }
+                    int dsdx = (int)lroundf(1024.0f * (u1 - u0) / (dx1 - dx0));
+                    int dtdy = (int)lroundf(1024.0f * (v1 - v0) / (dy1 - dy0));
+                    gSPWideTextureRectangle(POLY_OPA_DISP++, xq0, yq0, xq1, yq1, G_TX_RENDERTILE,
+                                            (int)lroundf((u0 - tu0) * 32), (int)lroundf((v0 - tv0) * 32), dsdx, dtdy);
+                }
+            }
+            tu0 = tu1;
+        }
+    }
+    CLOSE_DISPS(gfx);
 }
 
 // An item icon (the same textures the C buttons used); shade < 255 dims it
-static void UiIcon(GraphicsContext* gfx, uint8_t id, int x, int y, int size, int shade, int alpha) {
+static void Icon(GraphicsContext* gfx, uint8_t id, float fx, float fy, float fsize, int shade, int alpha) {
     const void* tex = nullptr;
     int dim = 32;
     switch (id) {
@@ -654,6 +750,8 @@ static void UiIcon(GraphicsContext* gfx, uint8_t id, int x, int y, int size, int
     if (tex == nullptr) {
         return;
     }
+    int xq0 = (int)lroundf((fx + sOx) * 4), yq0 = (int)lroundf(fy * 4);
+    int sq = (int)lroundf(fsize * 4);
     OPEN_DISPS(gfx);
     Gfx_SetupDL_39Opa(gfx);
     gDPPipeSync(POLY_OPA_DISP++);
@@ -662,13 +760,13 @@ static void UiIcon(GraphicsContext* gfx, uint8_t id, int x, int y, int size, int
     gDPLoadTextureBlock(POLY_OPA_DISP++, (void*)tex, G_IM_FMT_RGBA, G_IM_SIZ_32b, dim, dim, 0,
                         G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD,
                         G_TX_NOLOD);
-    gSPWideTextureRectangle(POLY_OPA_DISP++, x << 2, y << 2, (x + size) << 2, (y + size) << 2, G_TX_RENDERTILE, 0, 0,
-                            (dim << 10) / size, (dim << 10) / size);
+    int dsdx = (int)lroundf(1024.0f * dim / fsize);
+    gSPWideTextureRectangle(POLY_OPA_DISP++, xq0, yq0, xq0 + sq, yq0 + sq, G_TX_RENDERTILE, 0, 0, dsdx, dsdx);
     CLOSE_DISPS(gfx);
 }
 
-// 7x7 pixel button marks for the prompts (X, triangle, circle)
-static void UiGlyph(GraphicsContext* gfx, int which, int x, int y, int r, int g, int b) {
+// 7x7 pixel marks for the button prompts (X, triangle, circle) and the check mark
+static void Glyph(GraphicsContext* gfx, int which, float x, float y, float px, int r, int g, int b) {
     static const char* const kGlyphs[3][7] = {
         { "1000001", "0100010", "0010100", "0001000", "0010100", "0100010", "1000001" },
         { "0001000", "0001000", "0010100", "0010100", "0100010", "0100010", "1111111" },
@@ -677,18 +775,17 @@ static void UiGlyph(GraphicsContext* gfx, int which, int x, int y, int r, int g,
     for (int row = 0; row < 7; row++) {
         for (int col = 0; col < 7; col++) {
             if (kGlyphs[which][row][col] == '1') {
-                UiRect(gfx, x + col, y + row, 1, 1, r, g, b, 255);
+                FillQ(gfx, x + col * px, y + row * px, px, px, r, g, b, 255);
             }
         }
     }
 }
-
-static void UiCheck(GraphicsContext* gfx, int x, int y, int r, int g, int b) {
+static void CheckMark(GraphicsContext* gfx, float x, float y, float px, int r, int g, int b) {
     static const char* const kRowsCheck[6] = { "0000011", "0000110", "1001100", "1111000", "0110000", "0100000" };
     for (int row = 0; row < 6; row++) {
         for (int col = 0; col < 7; col++) {
             if (kRowsCheck[row][col] == '1') {
-                UiRect(gfx, x + col, y + row, 1, 1, r, g, b, 255);
+                FillQ(gfx, x + col * px, y + row * px, px, px, r, g, b, 255);
             }
         }
     }
@@ -699,47 +796,55 @@ struct Prompt {
     const char* label;
 };
 
-static void DrawPrompts(GraphicsContext* gfx, const std::vector<Prompt>& prompts) {
-    const float scale = 0.6f;
-    int total = 0;
+static void DrawPrompts(GraphicsContext* gfx, const std::vector<Prompt>& prompts, float y = 222, float cx = 213) {
+    float total = 0;
     for (const Prompt& p : prompts) {
-        total += 7 + 3 + TextWidth(p.label, scale) + 12;
+        total += 18 + TextW(p.label, 0.7f) + 12;
     }
-    total -= 12;
-    int x = 160 - total / 2, y = 224;
+    float x = cx - total / 2;
     for (const Prompt& p : prompts) {
-        UiGlyph(gfx, p.glyph, x, y + 3, 235, 240, 255);
-        x += 10;
-        x += UiText(gfx, p.label, x, y, 255, 255, 255, scale) + 12;
+        Disc(gfx, x + 6.5f, y + 6.5f, 6.8f, 20, 20, 24, 255);
+        Disc(gfx, x + 6.5f, y + 6.5f, 6.2f, 150, 150, 156, 255);
+        Glyph(gfx, p.glyph, x + 6.5f - 3.15f, y + 6.5f - 3.15f, 0.9f, 255, 255, 255);
+        Text(gfx, p.label, x + 16, y + 1.5f, 255, 255, 255, 0.7f);
+        x += 18 + TextW(p.label, 0.7f) + 12;
     }
 }
 
 namespace {
 
-// A slot: dark square, thin light frame, the icon. on = a gold fill (equipped in a list), dim = icon dimmed.
-void DrawSlot(GraphicsContext* gfx, int x, int y, int s, uint8_t item, bool on, bool dim) {
+const float kSL = 23, kSG = 3.5f; // slot square and the space between slots
+const int kBlue[3] = { 190, 205, 235 };
+const int kGold[3] = { 255, 220, 120 };
+
+} // namespace
+
+// A slot: dark square, thin light frame, the icon. on = dark gold fill with a gold frame (equipped in a list),
+// dim = the icon at about 30 %.
+static void DrawSlot(GraphicsContext* gfx, float x, float y, float s, uint8_t item, bool on, bool dim, float iconMargin) {
     if (on) {
-        UiRect(gfx, x, y, s, s, 232, 200, 110, 255);
-        UiRect(gfx, x + 1, y + 1, s - 2, s - 2, 70, 56, 20, 255);
+        FillQ(gfx, x, y, s, s, 70, 56, 20, 205);
+        Ring(gfx, x, y, s, s, 1.0f, 232, 200, 110, 255);
     } else {
-        UiRect(gfx, x, y, s, s, 130, 160, 235, 150);
-        UiRect(gfx, x + 1, y + 1, s - 2, s - 2, 4, 8, 24, 235);
+        FillQ(gfx, x, y, s, s, 4, 8, 24, 166);
+        Ring(gfx, x, y, s, s, 0.75f, 160, 190, 255, 140);
     }
     if (item != ITEM_NONE) {
-        int m = std::max(1, s / 8);
-        UiIcon(gfx, item, x + m, y + m, s - 2 * m, dim ? 80 : 255, dim ? 140 : 255);
+        Icon(gfx, item, x + iconMargin, y + iconMargin, s - 2 * iconMargin, dim ? 80 : 255, dim ? 90 : 255);
     }
 }
 
-// The steady gold selection: a glow, a gold frame, then the slot over it
-void DrawSelection(GraphicsContext* gfx, int x, int y, int s, bool red) {
-    int r = red ? 255 : 255, g = red ? 90 : 205, b = red ? 80 : 100;
-    UiRect(gfx, x - 4, y - 4, s + 8, s + 8, r, g, b, 40);
-    UiRect(gfx, x - 3, y - 3, s + 6, s + 6, r, g, b, 80);
-    UiRect(gfx, x - 2, y - 2, s + 4, s + 4, red ? 255 : 255, red ? 90 : 214, red ? 80 : 110, 255);
+// The steady gold selection: a glow, a gold frame, a light inner glow (red for a refused item)
+static void DrawSelection(GraphicsContext* gfx, float x, float y, float s, bool red) {
+    int r = 255, g = red ? 90 : 214, b = red ? 80 : 110;
+    Ring(gfx, x - 5.5f, y - 5.5f, s + 11, s + 11, 1.5f, r, g, b, 20);
+    Ring(gfx, x - 4.0f, y - 4.0f, s + 8, s + 8, 1.5f, r, g, b, 40);
+    Ring(gfx, x - 2.5f, y - 2.5f, s + 5, s + 5, 1.5f, r, g, b, 90);
+    Ring(gfx, x - 1.4f, y - 1.4f, s + 2.8f, s + 2.8f, 1.4f, r, g, b, 255);
+    Ring(gfx, x, y, s, s, 2.5f, r, std::min(255, g + 10), std::min(255, b + 30), 60);
 }
 
-void DrawAmmo(GraphicsContext* gfx, uint8_t item, int x, int y, int s) {
+static void DrawAmmo(GraphicsContext* gfx, uint8_t item, float x, float y, float s) {
     switch (item) {
         case ITEM_STICK:
         case ITEM_NUT:
@@ -754,58 +859,63 @@ void DrawAmmo(GraphicsContext* gfx, uint8_t item, int x, int y, int s) {
     }
     char buf[8];
     snprintf(buf, sizeof(buf), "%d", AMMO(item));
-    int w = TextWidth(buf, 0.5f);
-    UiText(gfx, buf, x + s - w - 1, y + s - 8, 255, 255, 255, 0.5f);
+    float w = TextW(buf, 0.5f);
+    Text(gfx, buf, x + s - 2 - w, y + s - 8.5f, 255, 255, 255, 0.5f);
 }
 
-const int kBlue[3] = { 190, 205, 235 };
-const int kGold[3] = { 255, 220, 120 };
+// The slot number (or a check mark) on the top-right corner of an equipped cell: a small round gold badge
+static void DrawBadge(GraphicsContext* gfx, float x, float y, float c, int number) {
+    float cx = x + c - 3.0f, cy = y + 2.0f;
+    Disc(gfx, cx, cy, 5.1f, 26, 18, 6, 255);
+    Disc(gfx, cx, cy, 4.5f, 232, 200, 110, 255);
+    if (number > 0) {
+        char t[4];
+        snprintf(t, sizeof(t), "%d", number);
+        float w = TextW(t, 0.45f);
+        Text(gfx, t, cx - w / 2, cy - 3.6f, 26, 18, 6, 0.45f, false);
+    } else {
+        CheckMark(gfx, cx - 3.0f, cy - 2.6f, 0.85f, 26, 18, 6);
+    }
+}
 
-void DrawMainPage(GraphicsContext* gfx, PlayState* play) {
+static void DrawMainPage(GraphicsContext* gfx, PlayState* play) {
     SlotDef cur = SlotAt(sRow, sCol);
     char name[40];
 
-    UiPanel(gfx, 6, 18, 200, 196);
-    UiText(gfx, SlotName(cur, name, sizeof(name)), 16, 22, kGold[0], kGold[1], kGold[2], 0.7f);
+    Window(gfx, 8, 18, 248, 196);
+    Text(gfx, SlotName(cur, name, sizeof(name)), 20, 22, kGold[0], kGold[1], kGold[2], 0.7f);
 
     for (int ri = 0; ri < 4; ri++) {
-        int y0 = 42 + ri * 41;
-        UiText(gfx, kRows[ri].label, 16, y0, kBlue[0], kBlue[1], kBlue[2], 0.55f);
-        int sel = -1;
-        int xs[10], xc = 16;
+        float y0 = 42.0f + ri * 41;
+        Text(gfx, kRows[ri].label, 20, y0, kBlue[0], kBlue[1], kBlue[2], 0.55f);
+        float xs[10], xc = 20;
         for (int i = 0; i < kRows[ri].count; i++) {
             xs[i] = xc;
-            xc += kRows[ri].s[i].kind < 0 ? 7 : kSlot + kGap;
+            xc += kRows[ri].s[i].kind < 0 ? 7 : kSL + kSG;
         }
+        int sel = -1;
         for (int i = 0; i < kRows[ri].count; i++) {
             SlotDef s = kRows[ri].s[i];
             if (s.kind < 0) {
                 continue;
             }
-            int x = xs[i], y = y0 + 11;
-            bool selected = (ri == sRow) && s.kind == cur.kind && s.idx == cur.idx;
-            if (selected) {
+            if (ri == sRow && s.kind == cur.kind && s.idx == cur.idx) {
                 sel = i;
-                continue; // drawn last, over its neighbours' glow
             }
             uint8_t item = SlotItem(s);
-            DrawSlot(gfx, x, y, kSlot, item, false, false);
-            DrawAmmo(gfx, item, x, y, kSlot);
+            DrawSlot(gfx, xs[i], y0 + 10, kSL, item, false, false, 2.5f);
+            DrawAmmo(gfx, item, xs[i], y0 + 10, kSL);
         }
         if (sel >= 0) {
-            int x = xs[sel], y = y0 + 11;
-            uint8_t item = SlotItem(cur);
-            DrawSelection(gfx, x, y, kSlot, false);
-            DrawSlot(gfx, x, y, kSlot, item, false, false);
-            DrawAmmo(gfx, item, x, y, kSlot);
+            DrawSelection(gfx, xs[sel], y0 + 10, kSL, false);
         }
     }
 
     // Right: Link and his status
-    UiPanel(gfx, 210, 18, 104, 196);
-    UiRect(gfx, 235, 41, 52, 90, 110, 125, 160, 200);
-    UiRect(gfx, 236, 42, 50, 88, 10, 14, 26, 255);
-    KaleidoScope_DrawPauseLink2D(play, 236, 42, 50, 88);
+    Window(gfx, 262, 18, 156, 196);
+    FillQ(gfx, 276, 34, 128, 92, 10, 14, 26, 255);
+    KaleidoScope_DrawPauseLink2D(play, 276 + sOx, 34, 128, 92);
+    Ring(gfx, 276, 34, 128, 92, 0.6f, 160, 190, 255, 128);
 
     uint8_t right = SoulsLoadout_Current(SL_RIGHT), shield = EquippedChooseOne(K_SHIELD);
     const WeaponStat* ws = Weapon(right);
@@ -825,15 +935,15 @@ void DrawMainPage(GraphicsContext* gfx, PlayState* play) {
         { "Boots", boots != ITEM_NONE ? ItemName(boots) : "-" },
     };
     for (int i = 0; i < 5; i++) {
-        UiText(gfx, lines[i].a, 216, 136 + i * 9, kBlue[0], kBlue[1], kBlue[2], 0.44f);
-        UiText(gfx, lines[i].b, 256, 136 + i * 9, 255, 255, 255, 0.44f);
+        Text(gfx, lines[i].a, 276, 132.0f + i * 10, kBlue[0], kBlue[1], kBlue[2], 0.52f);
+        Text(gfx, lines[i].b, 330, 132.0f + i * 10, 255, 255, 255, 0.52f);
     }
     uint8_t item = SlotItem(cur);
-    UiText(gfx, item != ITEM_NONE ? ItemName(item) : "(empty)", 216, 183, kGold[0], kGold[1], kGold[2], 0.6f);
+    Text(gfx, item != ITEM_NONE ? ItemName(item) : "(empty)", 276, 186, kGold[0], kGold[1], kGold[2], 0.62f);
     if (item != ITEM_NONE) {
-        std::vector<std::string> d = WrapText(ItemDesc(item), 92, 0.44f);
+        std::vector<std::string> d = WrapText(ItemDesc(item), 130, 0.48f);
         for (size_t i = 0; i < d.size() && i < 2; i++) {
-            UiText(gfx, d[i].c_str(), 216, 194 + (int)i * 8, 255, 255, 255, 0.44f);
+            Text(gfx, d[i].c_str(), 276, 197.0f + i * 8, 255, 255, 255, 0.48f);
         }
     }
 
@@ -846,8 +956,8 @@ void DrawMainPage(GraphicsContext* gfx, PlayState* play) {
 }
 
 // Compare card colors
-const int kUp[3] = { 120, 255, 140 }, kDown[3] = { 255, 120, 120 }, kDim[3] = { 160, 175, 210 };
-int Grade(char c) {
+static const int kUp[3] = { 120, 255, 140 }, kDown[3] = { 255, 120, 120 }, kDim[3] = { 160, 175, 210 };
+static int Grade(char c) {
     switch (c) {
         case 'S':
             return 6;
@@ -865,7 +975,7 @@ int Grade(char c) {
             return 0;
     }
 }
-int Rank(const char* s, const char* const* order, int n) {
+static int Rank(const char* s, const char* const* order, int n) {
     for (int i = 0; i < n; i++) {
         if (strcmp(s, order[i]) == 0) {
             return i + 1;
@@ -874,7 +984,7 @@ int Rank(const char* s, const char* const* order, int n) {
     return 0;
 }
 
-void DrawStatCard(GraphicsContext* gfx, uint8_t newId, uint8_t baseId, int x, int y) {
+static void DrawStatCard(GraphicsContext* gfx, uint8_t newId, uint8_t baseId, float x, float y) {
     static const char* const kReach[] = { "Short", "Medium", "Long" };
     static const char* const kSpeed[] = { "Slow", "Normal", "Fast" };
     const WeaponStat* w = Weapon(newId);
@@ -885,17 +995,16 @@ void DrawStatCard(GraphicsContext* gfx, uint8_t newId, uint8_t baseId, int x, in
     if (o == nullptr) {
         o = w;
     }
-    UiPanel(gfx, x, y, 154, 196);
-    UiText(gfx, ItemName(newId), x + 8, y + 24, kGold[0], kGold[1], kGold[2], 0.7f);
-    UiText(gfx, w->type, x + 9, y + 39, kBlue[0], kBlue[1], kBlue[2], 0.5f);
+    Window(gfx, x, y, 204, 188);
+    Text(gfx, ItemName(newId), x + 12, y + 3, kGold[0], kGold[1], kGold[2], 0.8f);
+    Text(gfx, w->type, x + 14, y + 22, kBlue[0], kBlue[1], kBlue[2], 0.56f);
 
-    const int cNow = x + 62, cArrow = x + 100, cNew = x + 108;
-    std::vector<std::string> head = WrapText(ItemName(baseId != ITEM_NONE ? baseId : newId), 40, 0.45f);
+    std::vector<std::string> head = WrapText(ItemName(baseId != ITEM_NONE ? baseId : newId), 62, 0.5f);
     for (size_t i = 0; i < head.size() && i < 2; i++) {
-        int yy = y + 53 + (int)i * 8 - (head.size() > 1 ? 8 : 0);
-        UiText(gfx, head[i].c_str(), cNow, yy, kDim[0], kDim[1], kDim[2], 0.45f);
+        float yy = y + 46 + i * 8.5f - (head.size() > 1 ? 8.5f : 0);
+        Text(gfx, head[i].c_str(), x + 76, yy, kDim[0], kDim[1], kDim[2], 0.5f);
     }
-    UiText(gfx, "New", cNew, y + 53, kDim[0], kDim[1], kDim[2], 0.45f);
+    Text(gfx, "New", x + 150, y + 46, kDim[0], kDim[1], kDim[2], 0.5f);
 
     struct Row {
         const char* label;
@@ -920,25 +1029,25 @@ void DrawStatCard(GraphicsContext* gfx, uint8_t newId, uint8_t baseId, int x, in
     rows.push_back({ "Reach", o->reach, w->reach, cmpI(Rank(w->reach, kReach, 3), Rank(o->reach, kReach, 3)) });
     rows.push_back({ "Speed", o->speed, w->speed, cmpI(Rank(w->speed, kSpeed, 3), Rank(o->speed, kSpeed, 3)) });
     for (size_t i = 0; i < rows.size(); i++) {
-        int yy = y + 62 + (int)i * 9;
+        float yy = y + 57 + i * 10.4f;
         const Row& r = rows[i];
-        UiText(gfx, r.label, x + 8, yy, 255, 255, 255, 0.5f);
+        Text(gfx, r.label, x + 14, yy, 255, 255, 255, 0.56f);
         if (r.cmp == 2) {
             continue;
         }
         const int* c = r.cmp > 0 ? kUp : (r.cmp < 0 ? kDown : kDim);
-        UiText(gfx, r.a.c_str(), cNow, yy, kDim[0], kDim[1], kDim[2], 0.5f);
-        UiText(gfx, ">", cArrow, yy, kDim[0], kDim[1], kDim[2], 0.5f);
-        int nr = r.cmp == 0 ? 255 : c[0], ng = r.cmp == 0 ? 255 : c[1], nb = r.cmp == 0 ? 255 : c[2];
-        UiText(gfx, r.b.c_str(), cNew, yy, nr, ng, nb, 0.5f);
+        Text(gfx, r.a.c_str(), x + 76, yy, kDim[0], kDim[1], kDim[2], 0.56f);
+        Text(gfx, ">", x + 138, yy, kDim[0], kDim[1], kDim[2], 0.56f);
+        Text(gfx, r.b.c_str(), x + 150, yy, r.cmp == 0 ? 255 : c[0], r.cmp == 0 ? 255 : c[1], r.cmp == 0 ? 255 : c[2],
+             0.56f);
     }
-    std::vector<std::string> pass = WrapText(w->passive, 138, 0.45f);
+    std::vector<std::string> pass = WrapText(w->passive, 180, 0.5f);
     for (size_t i = 0; i < pass.size() && i < 2; i++) {
-        UiText(gfx, pass[i].c_str(), x + 8, y + 162 + (int)i * 8, 170, 225, 255, 0.45f);
+        Text(gfx, pass[i].c_str(), x + 14, y + 163 + i * 9, 170, 225, 255, 0.5f);
     }
 }
 
-void DrawListPage(GraphicsContext* gfx) {
+static void DrawListPage(GraphicsContext* gfx) {
     int kind = sOpenKind;
     std::vector<uint8_t> list = BuildList(kind);
     if (list.empty()) {
@@ -952,54 +1061,37 @@ void DrawListPage(GraphicsContext* gfx) {
     bool onCur = EquippedIndex(kind, cur) >= 0;
     bool blocked = full && !onCur;
 
-    UiPanel(gfx, 6, 18, 150, 196);
-    UiText(gfx, KindName(kind), 16, 22, kGold[0], kGold[1], kGold[2], 0.7f);
+    Window(gfx, 8, 18, 188, 196);
+    Text(gfx, KindName(kind), 20, 22, kGold[0], kGold[1], kGold[2], 0.7f);
     if (multi) {
         char t[16];
         snprintf(t, sizeof(t), "%d / %d", n, cap);
-        UiText(gfx, t, 148 - TextWidth(t, 0.7f), 22, full ? 255 : kBlue[0], full ? 130 : kBlue[1], full ? 110 : kBlue[2],
-               0.7f);
+        Text(gfx, t, 184 - TextW(t, 0.7f), 22, full ? 255 : kBlue[0], full ? 130 : kBlue[1], full ? 110 : kBlue[2],
+             0.7f);
     }
 
     int cols = ListCols((int)list.size());
-    int c = cols == 8 ? 15 : 18, st = cols == 8 ? 17 : 22, x0 = cols == 8 ? 14 : 16;
-    int gridBottom = 40;
+    float c = cols == 8 ? 19.0f : 24.0f, st = cols == 8 ? 21.2f : 28.0f;
+    float gridBottom = 40;
     for (size_t i = 0; i < list.size(); i++) {
-        int x = x0 + (int)(i % cols) * st, y = 40 + (int)(i / cols) * st;
+        float x = 20 + (int)(i % cols) * st, y = 40 + (int)(i / cols) * st;
         gridBottom = y + c;
-        if ((int)i == sPcur) {
-            continue;
-        }
         bool on = EquippedIndex(kind, list[i]) >= 0, off = full && !on;
-        DrawSlot(gfx, x, y, c, list[i], on, off);
+        DrawSlot(gfx, x, y, c, list[i], on, off, c * 0.1f);
     }
-    // selection last, so the glow sits over its neighbours
     {
-        int x = x0 + (sPcur % cols) * st, y = 40 + (sPcur / cols) * st;
-        bool flash = sErrUntil > sFrame;
-        DrawSelection(gfx, x, y, c, flash);
-        DrawSlot(gfx, x, y, c, cur, onCur, blocked);
+        float x = 20 + (sPcur % cols) * st, y = 40 + (sPcur / cols) * st;
+        DrawSelection(gfx, x, y, c, sErrUntil > sFrame);
     }
-    // badges: the slot number (or a check mark for choose-one) on every equipped item
     for (size_t i = 0; i < list.size(); i++) {
         int at = EquippedIndex(kind, list[i]);
         if (at < 0) {
             continue;
         }
-        int x = x0 + (int)(i % cols) * st, y = 40 + (int)(i / cols) * st;
-        UiRect(gfx, x + c - 8, y - 4, 12, 12, 26, 18, 6, 255);
-        UiRect(gfx, x + c - 7, y - 3, 10, 10, 232, 200, 110, 255);
-        if (multi) {
-            char t[4];
-            snprintf(t, sizeof(t), "%d", at + 1);
-            int w = TextWidth(t, 0.55f);
-            UiText(gfx, t, x + c - 4 - w / 2, y - 4, 26, 18, 6, 0.55f);
-        } else {
-            UiCheck(gfx, x + c - 6, y - 1, 26, 18, 6);
-        }
+        float x = 20 + (int)(i % cols) * st, y = 40 + (int)(i / cols) * st;
+        DrawBadge(gfx, x, y, c, multi ? at + 1 : 0);
     }
 
-    // The right side: the compare card (right hand) or a big icon with the name and a line about the item
     char note[48] = "";
     if (blocked) {
         snprintf(note, sizeof(note), "All %d slots are full. Remove one first.", cap);
@@ -1012,33 +1104,27 @@ void DrawListPage(GraphicsContext* gfx) {
         if (base == ITEM_NONE) {
             base = ITEM_SWORD_KOKIRI;
         }
-        DrawStatCard(gfx, cur, base, 160, 18);
-        if (gridBottom < 150) {
-            UiText(gfx, ItemName(cur), 16, 160, 255, 255, 255, 0.62f);
-            std::vector<std::string> d = WrapText(ItemDesc(cur), 134, 0.45f);
+        DrawStatCard(gfx, cur, base, 202, 18);
+        if (gridBottom < 160) {
+            Text(gfx, ItemName(cur), 20, 168, 255, 255, 255, 0.7f);
+            std::vector<std::string> d = WrapText(ItemDesc(cur), 168, 0.48f);
             for (size_t i = 0; i < d.size() && i < 2; i++) {
-                UiText(gfx, d[i].c_str(), 16, 172 + (int)i * 8, 255, 255, 255, 0.45f);
+                Text(gfx, d[i].c_str(), 20, 182.0f + i * 9, 255, 255, 255, 0.48f);
             }
         }
         if (note[0] != '\0') {
-            std::vector<std::string> d = WrapText(note, 134, 0.45f);
-            for (size_t i = 0; i < d.size() && i < 2; i++) {
-                UiText(gfx, d[i].c_str(), 16, 192 + (int)i * 8, 255, 130, 110, 0.45f);
-            }
+            Text(gfx, note, 20, 201, 255, 130, 110, 0.48f);
         }
     } else {
-        UiPanel(gfx, 160, 18, 154, 196);
-        UiIcon(gfx, cur, 213, 42, 48, blocked ? 90 : 255, blocked ? 150 : 255);
-        UiText(gfx, ItemName(cur), 170, 104, kGold[0], kGold[1], kGold[2], 0.75f);
-        std::vector<std::string> d = WrapText(ItemDesc(cur), 134, 0.5f);
-        for (size_t i = 0; i < d.size() && i < 4; i++) {
-            UiText(gfx, d[i].c_str(), 170, 124 + (int)i * 9, 255, 255, 255, 0.5f);
+        Window(gfx, 202, 18, 216, 196);
+        Icon(gfx, cur, 278, 46, 64, blocked ? 90 : 255, blocked ? 100 : 255);
+        Text(gfx, ItemName(cur), 216, 130, kGold[0], kGold[1], kGold[2], 0.8f);
+        std::vector<std::string> d = WrapText(ItemDesc(cur), 188, 0.5f);
+        for (size_t i = 0; i < d.size() && i < 3; i++) {
+            Text(gfx, d[i].c_str(), 216, 150.0f + i * 10, 255, 255, 255, 0.5f);
         }
         if (note[0] != '\0') {
-            std::vector<std::string> nl = WrapText(note, 134, 0.5f);
-            for (size_t i = 0; i < nl.size() && i < 2; i++) {
-                UiText(gfx, nl[i].c_str(), 170, 170 + (int)i * 9, 255, 130, 110, 0.5f);
-            }
+            Text(gfx, note, 216, 176, 255, 130, 110, 0.5f);
         }
     }
 
@@ -1056,6 +1142,7 @@ void DrawListPage(GraphicsContext* gfx) {
     DrawPrompts(gfx, prompts);
 }
 
+namespace {
 } // namespace
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1165,10 +1252,10 @@ extern "C" void SoulsEquipPage_Draw(PlayState* play) {
         return;
     }
     GraphicsContext* gfx = play->state.gfxCtx;
+    sOx = OTRGetRectDimensionFromLeftEdge(0);
     // Dim the whole screen (the 16:9 width too), then the title and the page
-    UiRect(gfx, OTRGetRectDimensionFromLeftEdge(0) - 1, 0, OTRGetRectDimensionFromRightEdge(320) -
-           OTRGetRectDimensionFromLeftEdge(0) + 2, 240, 0, 0, 0, 165, true);
-    UiText(gfx, "EQUIPMENT", 14, 3, 255, 220, 120, 0.95f);
+    FillQ(gfx, -4, -2, 436, 244, 0, 0, 0, 205);
+    Text(gfx, "EQUIPMENT", 14, 4, 255, 220, 120, 0.95f);
     if (sPicker) {
         DrawListPage(gfx);
     } else {

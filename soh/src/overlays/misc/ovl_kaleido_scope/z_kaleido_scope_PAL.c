@@ -3529,7 +3529,7 @@ void KaleidoScope_Draw(PlayState* play) {
 
         KaleidoScope_SetView(pauseCtx, 0.0f, 0.0f, 64.0f);
 
-        if (!((pauseCtx->state >= 8) && (pauseCtx->state <= 0x11))) {
+        if (!((pauseCtx->state >= 8) && (pauseCtx->state <= 0x11)) && !SoulsEquipPage_Shown(play)) {
             KaleidoScope_DrawInfoPanel(play);
         }
 
