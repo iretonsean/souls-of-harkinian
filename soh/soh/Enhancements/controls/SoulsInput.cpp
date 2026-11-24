@@ -5,19 +5,21 @@
 //   Cross      -> L   (unused by the game otherwise)
 //   Circle     -> A + Modifier 1
 //   Triangle   -> A
-//   Square     -> C-left
+//   Square     -> C-left (the quick item: see SoulsQuickItem.cpp)
 //   R1/R2      -> B, L1/L3 -> R, L2/R3 -> Z, Options -> Start
 //
-// In play: the D-pad acts as the C buttons (items, Navi, ocarina notes) and Cross jumps. The jump is the game's own
+// In play: the D-pad acts as the C buttons (items, Navi, ocarina notes), Square uses the quick item (hold Square +
+// D-pad up/down switches it), and Cross jumps. The jump is the game's own
 // ledge jump (the running jump when Link runs forward, the standing jump otherwise, his normal jump voice), started
 // from the item-button check, so the game's rules apply (no jump while carrying something or in a cutscene). One jump
 // until Link has been on the ground for 3 frames; it can still grab ledges.
 // In menus (pause screen, file select / title, text boxes): the D-pad stays the D-pad, so with
 // "D-pad Support on Pause Screen" and "D-pad Support in Text Boxes" on it moves the cursor;
 // Cross confirms (A), Circle goes back (B), and holding R1 (B) while pressing a D-pad direction
-// assigns the highlighted item to that C button.
+// assigns the highlighted item to that C button. Square adds or removes the highlighted item in the quick item list.
 #include <libultraship/bridge/consolevariablebridge.h>
 #include "SoulsInput.h"
+#include "SoulsQuickItem.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
@@ -76,10 +78,11 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
         return;
     }
     u16 in = *buttons;
-    u16 out = in & ~(DPAD_BITS | BTN_L);
+    u16 out = in & ~(DPAD_BITS | BTN_L | BTN_CLEFT);
 
     if (!SoulsInput_InMenu()) {
         out |= SoulsInput_DpadToC(in);
+        SoulsQuickItem_Play(in, &out);
         bool cross = (in & BTN_L) != 0;
         if (cross && !sCrossWasDown && gPlayState != nullptr) {
             sJumpPending = true;
@@ -91,6 +94,7 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     }
 
     // Menus
+    SoulsQuickItem_Menu(in);
     if ((in & BTN_B) && (in & DPAD_BITS)) {
         // R1 + direction: equip the highlighted item to that C button
         out &= ~BTN_B;

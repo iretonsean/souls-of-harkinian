@@ -22,6 +22,7 @@
 #include "soh/Enhancements/gameplaystats.h"
 #include "soh/ObjectExtension/ActorMaximumHealth.h"
 #include "soh/Enhancements/speedrun/Speedrun.h"
+#include "soh/Enhancements/controls/SoulsQuickItem.h"
 
 #include "message_data_static.h"
 #include <libultraship/bridge/consolevariablebridge.h>
@@ -5083,6 +5084,28 @@ const char* digitTextures[] = { gCounterDigit0Tex, gCounterDigit1Tex, gCounterDi
                                 gCounterDigit2Tex, gCounterDigit3Tex, gCounterDigit4Tex, gCounterDigit5Tex,
                                 gCounterDigit6Tex, gCounterDigit7Tex, gCounterDigit8Tex };
 
+/**
+ * Souls of Harkinian: draws the quick item (Square) on the HUD.
+ * Placeholder look: the item icon in the D-pad up position, dimmed like a C button when it can't be used.
+ * Replace this function with the approved design.
+ */
+static void SoulsQuickItem_DrawHud(PlayState* play) {
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
+    OPEN_DISPS(play->state.gfxCtx);
+
+    if (gSaveContext.equips.buttonItems[4] < 0xF0) {
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadUpAlpha);
+        gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
+        Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[4]], 4);
+        gDPPipeSync(OVERLAY_DISP++);
+        gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
+                          PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
+        Interface_DrawAmmoCount(play, 4, interfaceCtx->dpadUpAlpha);
+    }
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 void Interface_Draw(PlayState* play) {
     static s16 magicArrowEffectsR[] = { 255, 100, 255 };
     static s16 magicArrowEffectsG[] = { 0, 100, 255 };
@@ -5564,7 +5587,9 @@ void Interface_Draw(PlayState* play) {
             Interface_DrawAmmoCount(play, 3, interfaceCtx->cRightAlpha);
         }
 
-        if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+        if (CVarGetInteger(CVAR_ENHANCEMENT("SoulsControls"), 0)) {
+            SoulsQuickItem_DrawHud(play);
+        } else if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
             // DPad is only greyed-out when all 4 DPad directions are too
             uint16_t dpadAlpha =
                 MAX(MAX(MAX(interfaceCtx->dpadUpAlpha, interfaceCtx->dpadDownAlpha), interfaceCtx->dpadLeftAlpha),

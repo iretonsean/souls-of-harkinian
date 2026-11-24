@@ -8,6 +8,7 @@
 #include "soh/OTRGlobals.h"
 
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/controls/SoulsQuickItem.h"
 #include <libultraship/bridge/consolevariablebridge.h>
 
 u8 gAmmoItems[] = {
@@ -393,6 +394,23 @@ void KaleidoScope_ResetItemCycling() {
 
 #pragma endregion
 
+/**
+ * Souls of Harkinian: marks the items in the quick item list on the item page.
+ * Placeholder look (the equipped-item outline); replace this function with the approved design.
+ */
+static void SoulsQuickItem_DrawPauseMarker(PlayState* play) {
+    PauseContext* pauseCtx = &play->pauseCtx;
+    OPEN_DISPS(play->state.gfxCtx);
+    for (s32 n = 0; n < SoulsQuickItem_Count(); n++) {
+        s32 slot = SoulsQuickItem_SlotAt(n);
+        if (slot >= 0 && slot < 24) {
+            gSPVertex(POLY_OPA_DISP++, &pauseCtx->itemVtx[slot * 4], 4, 0);
+            POLY_OPA_DISP = KaleidoScope_QuadTextureIA8(POLY_OPA_DISP, gEquippedItemOutlineTex, 32, 32, 0);
+        }
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 void KaleidoScope_DrawItemSelect(PlayState* play) {
     static s16 magicArrowEffectsR[] = { 255, 100, 255 };
     static s16 magicArrowEffectsG[] = { 0, 100, 255 };
@@ -677,7 +695,32 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
                          CHECK_BTN_ALL(input->cur.button, BTN_CUP))) {
                         buttonsToCheck |= BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT;
                     }
-                    if (CHECK_BTN_ANY(input->press.button, buttonsToCheck)) {
+                    if (CVarGetInteger(CVAR_ENHANCEMENT("SoulsControls"), 0) && SoulsQuickItem_ConsumeMenuPress()) {
+                        // Souls of Harkinian: Square adds or removes the item in the quick item list
+                        s32 qiResult = 3;
+                        if (CHECK_AGE_REQ_SLOT(cursorSlot) && (cursorItem != ITEM_SOLD_OUT) &&
+                            (cursorItem != ITEM_NONE)) {
+                            s32 qiItem = cursorItem;
+                            s32 qiSlot = cursorSlot;
+                            if (!CVarGetInteger(CVAR_ENHANCEMENT("SeparateArrows"), 0)) {
+                                // same as equipping to a C button: arrows become the bow with that arrow
+                                if (qiItem == ITEM_ARROW_FIRE) {
+                                    qiItem = ITEM_BOW_ARROW_FIRE;
+                                    qiSlot = SLOT_BOW;
+                                } else if (qiItem == ITEM_ARROW_ICE) {
+                                    qiItem = ITEM_BOW_ARROW_ICE;
+                                    qiSlot = SLOT_BOW;
+                                } else if (qiItem == ITEM_ARROW_LIGHT) {
+                                    qiItem = ITEM_BOW_ARROW_LIGHT;
+                                    qiSlot = SLOT_BOW;
+                                }
+                            }
+                            qiResult = SoulsQuickItem_Toggle(qiSlot, qiItem);
+                        }
+                        Audio_PlaySfxGeneral(qiResult == 3 ? NA_SE_SY_ERROR : NA_SE_SY_DECIDE, &gSfxDefaultPos, 4,
+                                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                                             &gSfxDefaultReverb);
+                    } else if (CHECK_BTN_ANY(input->press.button, buttonsToCheck)) {
                         if (CHECK_AGE_REQ_SLOT(cursorSlot) && (cursorItem != ITEM_SOLD_OUT) &&
                             (cursorItem != ITEM_NONE)) {
                             if (GameInteractor_Should(VB_EQUIP_ITEM_TO_C_BUTTON, true, play, cursorSlot, cursorItem)) {
@@ -723,6 +766,10 @@ void KaleidoScope_DrawItemSelect(PlayState* play) {
             gSPVertex(POLY_OPA_DISP++, &pauseCtx->itemVtx[j], 4, 0);
             POLY_OPA_DISP = KaleidoScope_QuadTextureIA8(POLY_OPA_DISP, gEquippedItemOutlineTex, 32, 32, 0);
         }
+    }
+
+    if (CVarGetInteger(CVAR_ENHANCEMENT("SoulsControls"), 0)) {
+        SoulsQuickItem_DrawPauseMarker(play);
     }
 
     gDPPipeSync(POLY_OPA_DISP++);
