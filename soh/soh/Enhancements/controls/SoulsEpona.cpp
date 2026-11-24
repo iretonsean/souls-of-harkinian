@@ -2,6 +2,8 @@
 // animation the horse actor uses) is drawn live over the icon's box, the way the character creator draws Link:
 // a viewport over the box, a perspective camera on the head limb, the game's own skin drawing.
 #include "soh/Enhancements/controls/SoulsEpona.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/ShipInit.hpp"
 
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <algorithm>
@@ -116,7 +118,7 @@ static void DrawHead(PlayState* play, float x, float y, float size) {
 
 void SoulsEpona_DrawIcon(GraphicsContext* gfx, int overlay, float x, float y, float size) {
     PlayState* play = gPlayState;
-    if (play == nullptr || !Init(play)) {
+    if (play == nullptr || !Init(play) || !sReady) {
         return;
     }
     if (sTickFrame != play->state.frames) {
@@ -141,3 +143,13 @@ void SoulsEpona_DrawIcon(GraphicsContext* gfx, int overlay, float x, float y, fl
 }
 
 } // extern "C"
+
+// The skin and its vertex buffers live in the scene arena, which Play_Destroy tears down: build them again in the next scene
+static void RegisterSoulsEponaReset() {
+    COND_HOOK(OnPlayDestroy, true, []() {
+        sReady = false;
+        sTickFrame = 0xFFFFFFFF;
+    });
+}
+
+static RegisterShipInitFunc initSoulsEponaReset(RegisterSoulsEponaReset, {});
