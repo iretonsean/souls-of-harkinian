@@ -145,6 +145,12 @@ static bool sTriPrev = false, sASent = false, sTriUsed = false, sTapActive = fal
 static std::chrono::steady_clock::time_point sTriStart, sTapStart;
 static u32 sTapFrame = 0;
 static const int kTapWindowMs = 70;
+static const int kTapMaxMs = 350; // a longer Triangle hold that ends without a D-pad press is a look at the pouch, not A
+
+// The action shown on Triangle needs A held down (grab a block to push or pull it)
+static bool TriangleHoldNeedsA() {
+    return gPlayState != nullptr && gPlayState->interfaceCtx.unk_1F0 == DO_ACTION_GRAB;
+}
 static const u32 kPouchFrames = 3;
 static void SetButton(int button, u8 item, u8 slot);
 
@@ -348,13 +354,16 @@ static u16 SoulsInput_Play(u16 in) {
     }
     bool sendA = false;
     if (triangle) {
-        if (!sTriUsed && !sASent &&
+        // A held Triangle only shows the pouch, so the player can look at it before choosing; A goes out during the
+        // hold only when the action needs a held A (grab: push or pull a block). Everything else acts on a tap.
+        if (!sTriUsed && !sASent && TriangleHoldNeedsA() &&
             std::chrono::duration_cast<std::chrono::milliseconds>(now - sTriStart).count() >= kTapWindowMs) {
             sASent = true;
         }
         sendA = sASent && !sTriUsed;
     } else {
-        if (sTriPrev && !sTriUsed && !sASent) {
+        if (sTriPrev && !sTriUsed && !sASent &&
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - sTriStart).count() < kTapMaxMs) {
             sTapActive = true; // a tap: A for at least one game frame
             sTapStart = now;
             sTapFrame = GameFrame();
