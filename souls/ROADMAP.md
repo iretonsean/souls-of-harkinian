@@ -40,7 +40,8 @@ Build plan:
 - Per-sword stats: attack (physical + element), scaling on Courage / Power / Wisdom, weight, reach, speed,
   passive effect. OoT's base damage (Kokiri 1, Master 2, Biggoron 4) maps to attack 100 / 200 / 400.
 - Stat card on pickup and in the pause screen, compared with the equipped sword the souls way: every stat shows
-  Now > New, green when the new value is better, red when worse (shown in the prototype's chest demo).
+  the equipped value > the new value, green when better, red when worse. The first column's header is the
+  equipped weapon's name (wrapped to two lines when long). Shown in the prototype's chest demo.
 - Placement: existing chests through the randomizer's item placement, or new chests (see the Unbound fork's
   actor and scene system).
 - All weapons, names and numbers are original. Nothing is copied from other games.
