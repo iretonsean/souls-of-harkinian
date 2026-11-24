@@ -2,10 +2,10 @@
 //
 // Expected bindings (Settings > Controls), all on port 1. Every PlayStation button needs its own N64 button, because
 // the game only sees N64 buttons:
-//   d-pad      -> N64 D-pad          Cross    -> L              Square -> C-left
+//   d-pad      -> N64 D-pad          Cross    -> Modifier 2     Square -> C-left
 //   Triangle   -> A                  Circle   -> A + Modifier 1 R1     -> B
 //   R2         -> C-right            L1       -> R              L2     -> C-down
-//   L3         -> C-up               R3       -> Z              Create -> Modifier 2
+//   L3, Create -> C-up               R3       -> Z              Touchpad -> L
 //   Options    -> Start
 //
 // In play the loadout (SoulsLoadout) decides what the buttons do. Each frame the current items are copied into the
@@ -19,7 +19,7 @@
 // L1 presses the left-hand item (C-down: tool or spell). L2 guards with the equipped shield (the game's R button;
 // the shield is gear on the Equipment page, not a slot). D-pad right / left / up / down switch the
 // right hand / left hand / spell / quick item. Triangle is A; while it is held the pouch shows and the D-pad does not
-// switch. L3 and Create are C-up (first person, Navi), R3 is Z (lock-on).
+// switch. The touchpad is L (the game's minimap toggle), the only button that sends L in play. L3 and Create are C-up (first person, Navi), R3 is Z (lock-on).
 // The pause screen and text boxes keep the older layout: R2 = B, L1 and L3 = R, L2 and R3 = Z.
 //
 // Cross jumps. The jump is the game's own ledge jump (the running jump when Link runs forward, the standing jump
@@ -119,7 +119,8 @@ static bool sPrevR1 = false, sPrevL1 = false, sPrevSquare = false;
 
 // Play layout. Returns the N64 buttons the game gets.
 static u16 SoulsInput_Play(u16 in) {
-    u16 out = in & ~(DPAD_BITS | BTN_L | BTN_B | BTN_R | BTN_Z | BTN_ALL_C | BTN_CUSTOM_MODIFIER2);
+    // Cross (Modifier 2) is handled by the caller; the touchpad (L) passes through as the minimap toggle
+    u16 out = in & ~(DPAD_BITS | BTN_B | BTN_R | BTN_Z | BTN_ALL_C | BTN_CUSTOM_MODIFIER2);
     bool triangle = (in & BTN_A) && !(in & BTN_SOULS_MOD1);
     bool r1 = (in & BTN_B) || (in & BTN_CRIGHT); // R1 or R2: right-hand attack
     bool l1 = (in & BTN_R) != 0;  // L1
@@ -162,7 +163,7 @@ static u16 SoulsInput_Play(u16 in) {
     sPrevSquare = square;
 
     // L3 and Create: first person look / Navi (the game decides). R3: lock-on.
-    if ((in & BTN_CUP) || (in & BTN_CUSTOM_MODIFIER2)) out |= BTN_CUP;
+    if (in & BTN_CUP) out |= BTN_CUP;
     if (in & BTN_Z) out |= BTN_Z;
     return out;
 }
@@ -174,7 +175,7 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     u16 in = *buttons;
 
     if (!SoulsInput_InMenu() && !SoulsInput_InOcarina()) {
-        bool cross = (in & BTN_L) != 0;
+        bool cross = (in & BTN_CUSTOM_MODIFIER2) != 0;
         if (cross && !sCrossWasDown && gPlayState != nullptr) {
             sJumpPending = true;
             sJumpFrame = gPlayState->gameplayFrames;
@@ -189,15 +190,16 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
 
     if (SoulsInput_InOcarina()) {
         // The ocarina: the D-pad plays the C notes, Triangle is A
-        bool cross = (in & BTN_L) != 0;
-        sCrossWasDown = cross;
+        sCrossWasDown = (in & BTN_CUSTOM_MODIFIER2) != 0;
         sJumpPending = false;
-        *buttons = (in & ~(DPAD_BITS | BTN_L)) | SoulsInput_DpadToC(in);
+        *buttons = (in & ~(DPAD_BITS | BTN_CUSTOM_MODIFIER2)) | SoulsInput_DpadToC(in);
         return;
     }
 
-    // Menus: R2 = B, L2 = Z, L3 = R, as before the loadout; Create does nothing
-    in &= ~BTN_CUSTOM_MODIFIER2;
+    // Menus: R2 = B, L2 = Z, L3 = R, as before the loadout. Cross (Modifier 2) confirms; the touchpad does nothing.
+    bool crossDown = (in & BTN_CUSTOM_MODIFIER2) != 0;
+    in &= ~(BTN_CUSTOM_MODIFIER2 | BTN_L);
+    if (crossDown) in |= BTN_L; // below, BTN_L means Cross
     u16 conv = in & ~(BTN_CRIGHT | BTN_CDOWN | BTN_CUP);
     if (in & BTN_CRIGHT) conv |= BTN_B;
     if (in & BTN_CDOWN) conv |= BTN_Z;
