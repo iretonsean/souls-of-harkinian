@@ -48,22 +48,29 @@ The A, B and C buttons are no longer used for items in play. Menus keep the exis
 
 ## 3. HUD (phase 1)
 
-All positions in N64 screen units, anchored to the screen edges with one margin of 12 on every side. Every element uses
-the white frame of OoT's magic meter.
+All positions in N64 screen units, anchored to the screen edges with one margin of 12 on every side. No text anywhere.
 
-- Top left: the carved stone heart from the Quest Status page (22 wide, rounded corners, white frame). Collected heart
-  pieces fill its hollow with OoT's own piece sprites in heart red; on the 4th the whole heart lights up, then the hollow
-  empties and the HP meter grows by one heart.
+- Top left: the carved stone heart from the Quest Status page (22 wide, rounded corners, thin white frame like the magic
+  meter's). Collected heart pieces fill its hollow with OoT's own piece sprites in heart red (255,70,50); on the 4th the
+  whole heart lights up, then the hollow empties and the HP meter grows by one heart.
 - Right of it, 6 apart, two meters of the same height drawn with OoT's magic meter sprites (scale 0.68), centred on the
-  stone: HP (heart red, length 14 + 7 per heart) and magic (OoT green, 48 single / 96 double). A meter that drops shows
-  the lost part in yellow for a moment. No numbers, no stamina.
-- Bottom left: the cross of four 19-unit slots (gap 1.5): spell up, left hand left, right hand right, quick item down.
-  Item icons only, ammo counts on the icon, no names. A used or switched slot flashes. The spell slot is dimmed without a
-  catalyst in hand. Holding Triangle swaps the cross to the 4 pouch slots.
+  stone: HP (heart red, length 14 + 7 per heart) and magic (OoT green 0,200,0; 48 single / 96 double). A meter that drops
+  shows the lost part in yellow (250,250,0) for a moment. No numbers, no stamina.
+- Top right: the collected Spiritual Stones (child) or Medallions (adult), only the collected ones, filling from the right
+  in collection order; icons 11.25 wide, gap 2.25; the visible art sits on the top and right margins. Medallions: no rim,
+  a two-layer hard black shadow (100 % at 1.8 / 1.6 icon-px, 90 % at 1.0 / 1.0) to match the shadow drawn into the stone
+  icons.
+- Bottom left: the item cross with Elden Ring proportions: four borderless soft dark panels, 19.7 wide x 23.75 tall,
+  gap 3.5; spell on top, quick item at the bottom (on the bottom margin), left hand and right hand straddling the gap
+  between them; item icons at 84 % of the slot width, ammo counts on the icon. Small preview panels (0.45 of the height,
+  80 % opacity) show the next spell (right of the spell slot, top-aligned) and the next quick item (right of the
+  quick-item slot, bottom-aligned) when there are 2 or more. A used or switched slot darkens with a soft warm inner glow.
+  The spell slot is dimmed without a catalyst in hand. Holding Triangle swaps the four slots to the pouch items (no mark).
 - Bottom right: rupees like Elden Ring's runes (soft dark band, rupee icon, number). The dungeon map sits above it at the
   same margin.
-- Triangle actions show as a small prompt near the bottom centre ("Triangle Check"), replacing OoT's A-button text.
-- Hidden: A, B, C buttons, the D-pad item display, OoT's hearts row.
+- Triangle actions show as a small prompt near the bottom centre (a triangle mark + OoT's own action word texture),
+  replacing OoT's A-button text.
+- Hidden: A, B, C buttons, the D-pad item display, OoT's hearts row, magic meter and rupee counter.
 
 ## 4. Equipment page (phase 2)
 
