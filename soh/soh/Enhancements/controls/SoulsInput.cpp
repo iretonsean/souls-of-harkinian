@@ -14,8 +14,10 @@
 //   C-right = the right-hand tool (Megaton Hammer, Deku Stick) or the current spell if the right hand holds the catalyst
 //   C-down  = the left-hand tool (Slingshot, Bow, Hookshot, Longshot, Boomerang) or the spell if it holds the catalyst
 //   B       = the sword of the right hand (the equipped sword is switched to match)
-// R1 / R2 press the right hand (B for a sword, C-right for a tool or spell). L1 presses the left hand (R = guard for a
-// shield, C-down for a tool or spell). L2 charges and releases a spin attack. D-pad right / left / up / down switch the
+//   R       = guard (L2)
+// R1 / R2 press the right hand (B for a sword, C-right for a tool or spell); holding R2 or R1 charges the spin attack.
+// L1 presses the left-hand item (C-down: tool or spell). L2 guards with the equipped shield (the game's R button;
+// the shield is gear on the Equipment page, not a slot). D-pad right / left / up / down switch the
 // right hand / left hand / spell / quick item. Triangle is A; while it is held the pouch shows and the D-pad does not
 // switch. L3 and Create are C-up (first person, Navi), R3 is Z (lock-on).
 // The pause screen and text boxes keep the older layout: R2 = B, L1 and L3 = R, L2 and R3 = Z.
@@ -113,18 +115,16 @@ static u8 UsableCurrent(SoulsLoadoutKind kind) {
 
 // Input state (all in play)
 static u16 sPrevDpad = 0;
-static bool sPrevR1 = false, sPrevL1 = false, sPrevSquare = false, sPrevL2 = false;
-static bool sSpinHolding = false; // L2: B is held until the sword is charged, then released (spin attack)
-static u32 sSpinStart = 0;
+static bool sPrevR1 = false, sPrevL1 = false, sPrevSquare = false;
 
 // Play layout. Returns the N64 buttons the game gets.
 static u16 SoulsInput_Play(u16 in) {
     u16 out = in & ~(DPAD_BITS | BTN_L | BTN_B | BTN_R | BTN_Z | BTN_ALL_C | BTN_CUSTOM_MODIFIER2);
     bool triangle = (in & BTN_A) && !(in & BTN_SOULS_MOD1);
     bool r1 = (in & BTN_B) || (in & BTN_CRIGHT); // R1 or R2: right-hand attack
-    bool l1 = (in & BTN_R) != 0;
+    bool l1 = (in & BTN_R) != 0;  // L1
     bool square = (in & BTN_CLEFT) != 0;
-    bool l2 = (in & BTN_CDOWN) != 0;
+    bool l2 = (in & BTN_CDOWN) != 0;  // L2
     SoulsLoadout_SetPouchHeld(triangle);
 
     // D-pad: switch hands, spell, quick item (not while Triangle is held: that is the pouch)
@@ -139,42 +139,27 @@ static u16 SoulsInput_Play(u16 in) {
 
     u8 right = UsableCurrent(SL_RIGHT);
     u8 left = UsableCurrent(SL_LEFT);
-    u32 frame = gPlayState != nullptr ? gPlayState->gameplayFrames : 0;
 
     // Right hand: a sword is the game's B button, any other item (or the spell) is on C-right
     if (r1 && right != ITEM_NONE) {
         out |= IsSword(right) ? BTN_B : BTN_CRIGHT;
         if (!sPrevR1) SoulsLoadout_NoteUse(SL_RIGHT);
     }
-    // Left hand: a shield guards (the game's R button), any other item (or the spell) is on C-down
+    // Left hand (L1): a ranged tool or the catalyst, on C-down (hold to aim, release to fire; the spell casts)
     if (l1 && left != ITEM_NONE) {
-        out |= IsShield(left) ? BTN_R : BTN_CDOWN;
+        out |= BTN_CDOWN;
         if (!sPrevL1) SoulsLoadout_NoteUse(SL_LEFT);
     }
+    // L2: guard with the equipped shield (the game's R button), always available
+    if (l2) out |= BTN_R;
     // Square: the quick item, on C-left
     if (square) {
         out |= BTN_CLEFT;
         if (!sPrevSquare && UsableCurrent(SL_QUICK) != ITEM_NONE) SoulsLoadout_NoteUse(SL_QUICK);
     }
-    // L2: spin attack = hold the sword button until the sword is fully charged, then let go
-    if (l2 && !sPrevL2 && IsSword(right) && !sSpinHolding) {
-        sSpinHolding = true;
-        sSpinStart = frame;
-    }
-    if (sSpinHolding) {
-        Player* player = gPlayState != nullptr ? GET_PLAYER(gPlayState) : nullptr;
-        bool charged = player != nullptr && (player->stateFlags1 & PLAYER_STATE1_CHARGING_SPIN_ATTACK) &&
-                       player->unk_858 >= 0.9f;
-        if (charged || frame - sSpinStart > 80) {
-            sSpinHolding = false;
-        } else {
-            out |= BTN_B;
-        }
-    }
     sPrevR1 = r1;
     sPrevL1 = l1;
     sPrevSquare = square;
-    sPrevL2 = l2;
 
     // L3 and Create: first person look / Navi (the game decides). R3: lock-on.
     if ((in & BTN_CUP) || (in & BTN_CUSTOM_MODIFIER2)) out |= BTN_CUP;
@@ -200,8 +185,7 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     }
     SoulsLoadout_SetPouchHeld(false);
     sPrevDpad = in & DPAD_BITS;
-    sSpinHolding = false;
-    sPrevR1 = sPrevL1 = sPrevSquare = sPrevL2 = false;
+    sPrevR1 = sPrevL1 = sPrevSquare = false;
 
     if (SoulsInput_InOcarina()) {
         // The ocarina: the D-pad plays the C notes, Triangle is A
@@ -386,11 +370,6 @@ static void EquipSword(PlayState* play, Player* player, u8 sword) {
     Player_SetEquipmentData(play, player);
 }
 
-static void EquipShield(PlayState* play, Player* player, u8 shield) {
-    Inventory_ChangeEquipment(EQUIP_TYPE_SHIELD, shield - ITEM_SHIELD_DEKU + 1);
-    Player_SetEquipmentData(play, player);
-}
-
 static void SyncLoadout() {
     if (gPlayState == nullptr) {
         return;
@@ -417,9 +396,6 @@ static void SyncLoadout() {
     if (!busy) {
         if (IsSword(right) && gSaveContext.equips.buttonItems[0] != right) {
             EquipSword(gPlayState, player, right);
-        }
-        if (IsShield(left) && CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD) != left - ITEM_SHIELD_DEKU + 1) {
-            EquipShield(gPlayState, player, left);
         }
     }
 

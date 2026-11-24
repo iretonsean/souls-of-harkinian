@@ -11,7 +11,7 @@ extern "C" {
 
 typedef enum {
     SL_RIGHT,  // 3 slots: swords, hammer, Deku Stick
-    SL_LEFT,   // 3 slots: shields, slingshot, bow, hookshot, longshot, boomerang, catalyst
+    SL_LEFT,   // 3 slots: slingshot, bow, hookshot, longshot, boomerang, catalyst
     SL_SPELL,  // 3 slots: Din's Fire, Farore's Wind, Nayru's Love
     SL_ARROW,  // 2 slots: fire, ice, light arrows
     SL_QUICK,  // 8 slots: consumables + Epona
@@ -46,6 +46,10 @@ uint32_t SoulsLoadout_LastSwitchFrame(SoulsLoadoutKind kind);
 void SoulsLoadout_NoteUse(SoulsLoadoutKind kind);               // the input layer calls this when it uses a slot
 bool SoulsLoadout_PouchHeld(void);                              // Triangle held in play: the HUD shows the pouch (input layer sets it)
 void SoulsLoadout_SetPouchHeld(bool held);
+
+// For the HUD: the spirit stones (child) and medallions (adult) in the order the player got them. Writes up to max
+// quest item ids (QUEST_KOKIRI_EMERALD, QUEST_MEDALLION_FOREST, ...) to out and returns how many. Saved per file.
+int SoulsLoadout_QuestOrder(uint8_t* out, int max);
 
 #ifdef __cplusplus
 }

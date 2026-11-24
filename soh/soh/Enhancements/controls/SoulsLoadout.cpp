@@ -2,10 +2,12 @@
 //
 // Six lists of item slots (right hand, left hand, spells, arrows, quick items, pouch) plus the active slot of each.
 // Items are OoT item IDs. The lists are saved per file in the section "soulsLoadout". A save without the section is
-// filled once, when it loads, from what Link has equipped (sword, shield, C-button items), so nobody starts unarmed.
+// filled once, when it loads, from what Link has equipped (sword, C-button items), so nobody starts unarmed.
 #include "soh/Enhancements/controls/SoulsLoadout.h"
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <nlohmann/json.hpp>
+#include <vector>
+#include <algorithm>
 #include "soh/SaveManager.h"
 #include "soh/ShipInit.hpp"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
@@ -15,6 +17,7 @@ extern "C" {
 #include "macros.h"
 #include "variables.h"
 // Age tables of the pause menu (z_kaleido_scope_PAL.c)
+extern PlayState* gPlayState;
 extern u8 gItemAgeReqs[];
 extern u8 gEquipAgeReqs[][4];
 }
@@ -25,6 +28,7 @@ uint8_t sSlots[SL_KIND_COUNT][8];
 int sCurrent[SL_KIND_COUNT] = {};
 uint32_t sLastUse[SL_KIND_COUNT] = {}, sLastSwitch[SL_KIND_COUNT] = {};
 bool sPouchHeld = false;
+std::vector<uint8_t> sQuestOrder; // stones and medallions in collection order
 bool sFilled = false; // the save has a loadout (loaded, or filled once)
 
 bool Valid(int kind) {
@@ -98,10 +102,6 @@ bool CanEquipRight(uint8_t item) {
 }
 
 bool CanEquipLeft(uint8_t item) {
-    if (item >= ITEM_SHIELD_DEKU && item <= ITEM_SHIELD_MIRROR) {
-        int v = item - ITEM_SHIELD_DEKU + 1; // EQUIP_VALUE_SHIELD_*
-        return OwnsEquip(EQUIP_TYPE_SHIELD, v) && AgeOk(gEquipAgeReqs[EQUIP_TYPE_SHIELD][v]);
-    }
     switch (item) {
         case ITEM_SLINGSHOT:
         case ITEM_BOW:
@@ -197,17 +197,13 @@ void AddToFirstFree(SoulsLoadoutKind kind, uint8_t item) {
     }
 }
 
-// One-time fill for a save without a loadout: sword -> right hand 1, shield -> left hand 1, C-button items sorted
+// One-time fill for a save without a loadout: sword -> right hand 1, C-button items sorted (the shield stays OoT's equipped shield)
 void FillFromEquipment() {
     ClearAll();
     uint8_t sword = gSaveContext.equips.buttonItems[0];
     if (sword == ITEM_SWORD_KOKIRI || sword == ITEM_SWORD_MASTER || sword == ITEM_SWORD_BGS ||
         sword == ITEM_SWORD_KNIFE) {
         sSlots[SL_RIGHT][0] = sword;
-    }
-    int shield = CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD);
-    if (shield >= EQUIP_VALUE_SHIELD_DEKU && shield <= EQUIP_VALUE_SHIELD_MIRROR) {
-        sSlots[SL_LEFT][0] = ITEM_SHIELD_DEKU + shield - 1;
     }
     for (int b = 1; b <= 3; b++) {
         uint8_t item = gSaveContext.equips.buttonItems[b];
@@ -225,7 +221,25 @@ void FillFromEquipment() {
     sFilled = true;
 }
 
+const uint8_t kOrderItems[] = { QUEST_KOKIRI_EMERALD, QUEST_GORON_RUBY,      QUEST_ZORA_SAPPHIRE,
+                                QUEST_MEDALLION_FOREST, QUEST_MEDALLION_FIRE,   QUEST_MEDALLION_WATER,
+                                QUEST_MEDALLION_SPIRIT, QUEST_MEDALLION_SHADOW, QUEST_MEDALLION_LIGHT };
+
+// Add stones / medallions that the file has but the order list does not (new ones go to the end)
+void UpdateQuestOrder() {
+    for (uint8_t q : kOrderItems) {
+        if (CHECK_QUEST_ITEM(q)) {
+            if (std::find(sQuestOrder.begin(), sQuestOrder.end(), q) == sQuestOrder.end()) {
+                sQuestOrder.push_back(q);
+            }
+        } else {
+            sQuestOrder.erase(std::remove(sQuestOrder.begin(), sQuestOrder.end(), q), sQuestOrder.end());
+        }
+    }
+}
+
 void Save(const SaveContext& saveContext, int sectionID, bool fullSave) {
+    SaveManager::Instance->SaveData("questOrder", nlohmann::json(sQuestOrder).dump());
     nlohmann::json lists = nlohmann::json::array();
     for (int k = 0; k < SL_KIND_COUNT; k++) {
         nlohmann::json one = nlohmann::json::array();
@@ -245,6 +259,15 @@ void Save(const SaveContext& saveContext, int sectionID, bool fullSave) {
 void Load() {
     ClearAll();
     std::string text;
+    SaveManager::Instance->LoadData("questOrder", text, std::string());
+    nlohmann::json order = nlohmann::json::parse(text.empty() ? "[]" : text, nullptr, false);
+    if (!order.is_discarded() && order.is_array()) {
+        for (auto& q : order) {
+            if (q.is_number_integer()) {
+                sQuestOrder.push_back((uint8_t)q.get<int>());
+            }
+        }
+    }
     SaveManager::Instance->LoadData("lists", text, std::string());
     nlohmann::json lists = nlohmann::json::parse(text.empty() ? "[]" : text, nullptr, false);
     if (!lists.is_discarded() && lists.is_array()) {
@@ -273,6 +296,7 @@ void Load() {
 
 void Reset(bool isDebug) {
     ClearAll();
+    sQuestOrder.clear();
     sFilled = false;
 }
 
@@ -287,7 +311,14 @@ void RegisterLoadout() {
     SaveManager::Instance->AddSaveFunction("soulsLoadout", 1, Save, true, SECTION_PARENT_NONE);
     SaveManager::Instance->AddLoadFunction("soulsLoadout", 1, Load);
     // After the file is loaded: a save without the section gets its one-time fill
+    // Watch the stones and medallions (every frame, also with Souls controls off)
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([]() {
+        if (gPlayState != nullptr) {
+            UpdateQuestOrder();
+        }
+    });
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnLoadGame>([](int32_t fileNum) {
+        UpdateQuestOrder(); // old saves: the stones and medallions they have, in id order
         if (!sFilled && SoulsLoadout_IsEnabled()) {
             FillFromEquipment();
         }
@@ -369,6 +400,15 @@ extern "C" void SoulsLoadout_Cycle(SoulsLoadoutKind kind, int dir) {
             }
         }
     }
+}
+extern "C" int SoulsLoadout_QuestOrder(uint8_t* out, int max) {
+    int n = 0;
+    for (uint8_t q : sQuestOrder) {
+        if (n < max) {
+            out[n++] = q;
+        }
+    }
+    return n;
 }
 extern "C" bool SoulsLoadout_HasCatalyst(void) {
     return SoulsLoadout_Current(SL_LEFT) == SOULS_ITEM_CATALYST || SoulsLoadout_Current(SL_RIGHT) == SOULS_ITEM_CATALYST;
