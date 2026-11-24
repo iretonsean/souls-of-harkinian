@@ -17,6 +17,7 @@ uint8_t sSlots[SL_KIND_COUNT][8] = {
 };
 int sCurrent[SL_KIND_COUNT] = {};
 uint32_t sLastUse[SL_KIND_COUNT] = {}, sLastSwitch[SL_KIND_COUNT] = {};
+bool sPouchHeld = false;
 bool Valid(int kind) {
     return kind >= 0 && kind < SL_KIND_COUNT;
 }
@@ -106,4 +107,10 @@ extern "C" void SoulsLoadout_NoteUse(SoulsLoadoutKind kind) {
     if (Valid(kind)) {
         sLastUse[kind] = (uint32_t)gSaveContext.ship.stats.playTimer;
     }
+}
+extern "C" bool SoulsLoadout_PouchHeld(void) {
+    return sPouchHeld;
+}
+extern "C" void SoulsLoadout_SetPouchHeld(bool held) {
+    sPouchHeld = held;
 }

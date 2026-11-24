@@ -44,6 +44,8 @@ bool SoulsLoadout_CanEquip(SoulsLoadoutKind kind, uint8_t item);// owned + right
 uint32_t SoulsLoadout_LastUseFrame(SoulsLoadoutKind kind);
 uint32_t SoulsLoadout_LastSwitchFrame(SoulsLoadoutKind kind);
 void SoulsLoadout_NoteUse(SoulsLoadoutKind kind);               // the input layer calls this when it uses a slot
+bool SoulsLoadout_PouchHeld(void);                              // Triangle held in play: the HUD shows the pouch (input layer sets it)
+void SoulsLoadout_SetPouchHeld(bool held);
 
 #ifdef __cplusplus
 }
