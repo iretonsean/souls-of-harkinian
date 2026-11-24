@@ -75,12 +75,12 @@ ships, they are downloaded but unused. `dependencies.json` lists which file of e
 | Durandal | adult | [Durandal over Biggoron's Sword](https://gamebanana.com/mods/594055) | Jameriquiah |
 | Golden Claymore | adult | [Golden Claymore over Biggoron's Sword](https://gamebanana.com/mods/442039) | sitton76 |
 
-### Where the swords are (DRAFT)
+### Where the swords are
 
 ![Schematic map of Hyrule with a chest for each custom sword](map/hyrule-chests.png)
 
-Each sword waits in a chest. Child chests are brown, adult chests are blue. The placements are a draft until they're
-approved; `map/hyrule.json` holds them, and `python3 map/make_map.py` redraws the map (needs `rsvg-convert` for the
+Each sword waits in a chest. Child chests are brown, adult chests are blue. `map/hyrule.json` holds the
+placements, and `python3 map/make_map.py` redraws the map (needs `rsvg-convert` for the
 PNG). The map is drawn in code from simple shapes: it contains no art from the game.
 
 | # | Sword | Creator | Age | Class | Chest |

@@ -39,12 +39,13 @@ Build plan:
 - New swords as custom items, built the same way as SoH's Roc's Feather (item id, icon, name, get-item text).
 - Per-sword stats: attack (physical + element), scaling on Courage / Power / Wisdom, weight, reach, speed,
   passive effect. OoT's base damage (Kokiri 1, Master 2, Biggoron 4) maps to attack 100 / 200 / 400.
-- Stat card on pickup and in the pause screen, compared with the equipped sword.
+- Stat card on pickup and in the pause screen, compared with the equipped sword the souls way: every stat shows
+  Now > New, green when the new value is better, red when worse (shown in the prototype's chest demo).
 - Placement: existing chests through the randomizer's item placement, or new chests (see the Unbound fork's
   actor and scene system).
 - All weapons, names and numbers are original. Nothing is copied from other games.
 
-Placement (DRAFT, not approved yet). Source of truth: `map/hyrule.json`, drawn by `map/make_map.py` as
+Placement (approved). Source of truth: `map/hyrule.json`, drawn by `map/make_map.py` as
 `map/hyrule-chests.png`. Swords use their creators' names. Chests that hold rupees are swapped first; in a dungeon the
 exact chest is picked when the build gets there, never one that holds a key or an item the route needs.
 The two Biggoron-class swords (Durandal, Golden Claymore) sit late in the adult route so the strongest attack comes last.

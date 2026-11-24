@@ -97,7 +97,7 @@
     {"type": "grotto", "name": "Death Mountain Trail storms grotto", "at": [745, 150]}
   ],
   "chests": {
-    "status": "DRAFT: placements wait for the owner's approval.",
+    "status": "Approved 2026-11-23.",
     "list": [
       {"n": 1, "sword": "Longer Kokiri Sword", "creator": "nickelndime246", "age": "child", "class": "Kokiri", "where": "Lost Woods grotto (rupee chest)", "at": [860, 420]},
       {"n": 2, "sword": "Razor Sword", "creator": "Reppan", "age": "child", "class": "Kokiri", "where": "Dodongo's Cavern (bomb flower platform chest)", "at": [715, 120]},

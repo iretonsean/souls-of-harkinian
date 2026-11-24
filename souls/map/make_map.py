@@ -151,8 +151,6 @@ def build():
     # title
     o.append(label('Souls of Harkinian', 30, 44, 28, 'start', '700'))
     o.append(label('Swords of Hyrule: where each custom sword waits in a chest', 30, 66, 14, 'start', '400', 'italic', INK2))
-    o.append('<g transform="rotate(-4 1090 42)"><rect x="1020" y="22" width="140" height="38" rx="4" fill="none" stroke="#a8322c" stroke-width="2.5"/>'
-             '<text x="1090" y="49" font-family="%s" font-size="20" font-weight="700" text-anchor="middle" fill="#a8322c" letter-spacing="3">DRAFT</text></g>' % FONT)
     # map
     o.append('<g transform="translate(0 %d)">' % TOP)
     lands = [blob(l['c'], l['r'], l['seed']) for l in DATA['land']]
@@ -201,7 +199,6 @@ def build():
     o.append(chest(40, yy + 24, 0, 'adult', badge=False))
     o.append(label('Chest, adult Link', 62, yy + 28, 12.5))
     o.append(label('Swords (creator, age, chest)', 260, y0 + 30, 15, 'start', '700'))
-    o.append(label(DATA['chests']['status'], 520, y0 + 30, 12, 'start', '400', 'italic', '#a8322c'))
     lst = DATA['chests']['list']
     half = (len(lst) + 1) // 2
     for i, c in enumerate(lst):
