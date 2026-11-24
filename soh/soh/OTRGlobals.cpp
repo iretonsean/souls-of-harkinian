@@ -1650,6 +1650,10 @@ extern "C" void DeinitOTR() {
     sohFast3dWindow = nullptr;
 
     OTRGlobals::Instance->context = nullptr;
+    // Destroy the context (and its window) now, not in a static destructor during exit(): on Wayland without server
+    // decorations, libdecor's GTK plugin draws once more while the window closes, and GTK's image loader (glycin, Rust)
+    // aborts when thread-local storage is already torn down ("AccessError", signal 6 on every quit).
+    Ship::Context::DestroyInstance();
 }
 
 #ifdef _WIN32
