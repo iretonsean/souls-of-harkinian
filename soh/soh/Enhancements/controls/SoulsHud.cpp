@@ -570,7 +570,7 @@ struct SoulsQuestIcon {
 };
 
 // The row sits on the HUD margin by its visible art: top edge at the margin, rightmost right edge at the margin.
-// TODO: record the real collection order (the loadout save section can store it); for now a fixed order.
+// Order: collection order from the loadout save section (first collected = rightmost); the list order fills gaps.
 static void DrawQuestRow(PlayState* play, float right, float top) {
     static const SoulsQuestIcon kStones[] = { { gQuestIconKokiriEmeraldTex, QUEST_KOKIRI_EMERALD, 0, 1 },
                                          { gQuestIconGoronRubyTex, QUEST_GORON_RUBY, 0, 1 },
@@ -585,9 +585,29 @@ static void DrawQuestRow(PlayState* play, float right, float top) {
     const SoulsQuestIcon* list = adult ? kMedals : kStones;
     const int count = adult ? 6 : 3;
     const float sz = 11.25f, gap = 2.25f, px = sz / 24.0f;
+    uint8_t order[16];
+    int n = SoulsLoadout_QuestOrder(order, 16);
+    int idx[6], m = 0;
+    for (int o = 0; o < n && m < count; o++) { // collected ones in collection order
+        for (int i = 0; i < count; i++) {
+            if (list[i].bit == order[o]) {
+                idx[m++] = i;
+            }
+        }
+    }
+    for (int i = 0; i < count && m < count; i++) { // any the order list misses, in list order
+        bool seen = false;
+        for (int j = 0; j < m; j++) {
+            seen = seen || idx[j] == i;
+        }
+        if (!seen) {
+            idx[m++] = i;
+        }
+    }
     float boxRight = 0.0f;
     bool first = true;
-    for (int i = 0; i < count; i++) {
+    for (int j = 0; j < m; j++) {
+        const int i = idx[j];
         if (!CHECK_QUEST_ITEM(list[i].bit)) {
             continue;
         }
