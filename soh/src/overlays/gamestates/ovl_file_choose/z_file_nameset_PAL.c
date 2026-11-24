@@ -1,4 +1,5 @@
 #include "file_choose.h"
+#include "soh/Enhancements/cosmetics/SoulsCreator.h"
 #include "textures/title_static/title_static.h"
 #include "assets/overlays/ovl_File_Choose/ovl_file_choose.h"
 #include "assets/soh_assets.h"
@@ -457,16 +458,19 @@ void FileChoose_DrawNameEntry(GameState* thisx) {
                             Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4,
                                                  &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                                                  &gSfxDefaultReverb);
-                            gSaveContext.fileNum = this->buttonIndex;
-                            dayTime = ((void)0, gSaveContext.dayTime);
-                            Sram_InitSave(this);
-                            gSaveContext.dayTime = dayTime;
-                            this->prevConfigMode = CM_MAIN_MENU;
-                            this->configMode = CM_NAME_ENTRY_TO_MAIN;
-                            CVarSetInteger(CVAR_GENERAL("OnFileSelectNameEntry"), 0);
-                            this->nameBoxAlpha[this->buttonIndex] = this->nameAlpha[this->buttonIndex] = 200;
-                            this->connectorAlpha[this->buttonIndex] = 255;
-                            Rumble_Request(300.0f, 0xB4, 0x14, 0x64);
+                            // Souls: the creator's Name row returns to the creator
+                            if (!SoulsCreator_OnNameConfirmed(this)) {
+                                gSaveContext.fileNum = this->buttonIndex;
+                                dayTime = ((void)0, gSaveContext.dayTime);
+                                Sram_InitSave(this);
+                                gSaveContext.dayTime = dayTime;
+                                this->prevConfigMode = CM_MAIN_MENU;
+                                this->configMode = CM_NAME_ENTRY_TO_MAIN;
+                                CVarSetInteger(CVAR_GENERAL("OnFileSelectNameEntry"), 0);
+                                this->nameBoxAlpha[this->buttonIndex] = this->nameAlpha[this->buttonIndex] = 200;
+                                this->connectorAlpha[this->buttonIndex] = 255;
+                                Rumble_Request(300.0f, 0xB4, 0x14, 0x64);
+                            }
                         } else {
                             Audio_PlaySfxGeneral(NA_SE_SY_FSEL_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                                  &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);

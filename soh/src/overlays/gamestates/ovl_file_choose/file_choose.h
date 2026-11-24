@@ -216,6 +216,8 @@ void FileChoose_ExitEraseToMain(GameState* thisx);
 void FileChoose_UpdateKeyboardCursor(GameState* thisx);
 void FileChoose_StartNameEntry(GameState* thisx);
 void FileChoose_StartNameEntryFromMenu(FileChooseContext* fileChooseContext);
+int FileChoose_GetNewFileName(FileChooseContext* fileChooseContext, char* out, int outSize);
+void FileChoose_FinishNewFileFromMenu(FileChooseContext* fileChooseContext);
 
 // Helpers for the scrolling option lists in the boss rush, randomizer and speedrun menus.
 // Fades in the menu text and bobs the scroll arrows. Call once per frame.
