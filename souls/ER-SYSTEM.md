@@ -24,7 +24,8 @@ exists. No text on the play HUD.
 | R3 | Lock-on (Z-target) |
 | L3 | First-person look (OoT's C-up) |
 | Create | Navi |
-| Options / touchpad | Pause menu / map page |
+| Options | Pause menu |
+| Touchpad | Toggle the minimap on / off (OoT's L button; Elden Ring's touchpad is the map). When shown, the minimap sits above the runes at the HUD margin |
 
 The A, B and C buttons are no longer used for items in play. Menus keep the existing Souls menu layout.
 
