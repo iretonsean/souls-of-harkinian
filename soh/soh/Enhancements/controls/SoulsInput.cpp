@@ -1,23 +1,38 @@
-// Souls of Harkinian: one controller layout for play and another for menus.
+// Souls of Harkinian: one controller layout for play and another for menus (see souls/ER-SYSTEM.md section 1).
 //
-// Expected bindings (Settings > Controls), all on port 1:
-//   d-pad      -> N64 D-pad (D-up/down/left/right)
-//   Cross      -> L   (unused by the game otherwise)
-//   Circle     -> A + Modifier 1
-//   Triangle   -> A
-//   Square     -> C-left
-//   R1/R2      -> B, L1/L3 -> R, L2/R3 -> Z, Options -> Start
+// Expected bindings (Settings > Controls), all on port 1. Every PlayStation button needs its own N64 button, because
+// the game only sees N64 buttons:
+//   d-pad      -> N64 D-pad          Cross    -> Modifier 2     Square -> C-left
+//   Triangle   -> A                  Circle   -> A + Modifier 1 R1     -> B
+//   R2         -> C-right            L1       -> R              L2     -> C-down
+//   L3, Create -> C-up               R3       -> Z              Touchpad -> L
+//   Options    -> Start
 //
-// In play: the D-pad acts as the C buttons (items, Navi, ocarina notes) and Cross jumps. The jump is the game's own
-// ledge jump (the running jump when Link runs forward, the standing jump otherwise, his normal jump voice), started
-// from the item-button check, so the game's rules apply (no jump while carrying something or in a cutscene). One jump
-// until Link has been on the ground for 3 frames; it can still grab ledges.
+// In play the loadout (SoulsLoadout) decides what the buttons do. Each frame the current items are copied into the
+// game's own button slots, so the game's item code (aiming, ammo, bottles, magic, age rules) works as for a C button:
+//   C-left  = the current quick item (Square)
+//   C-right = the right-hand tool (Megaton Hammer, Deku Stick) or the current spell if the right hand holds the catalyst
+//   C-down  = the left-hand tool (Slingshot, Bow, Hookshot, Longshot, Boomerang) or the spell if it holds the catalyst
+//   B       = the sword of the right hand (the equipped sword is switched to match)
+//   R       = guard (L2)
+// R1 / R2 press the right hand (B for a sword, C-right for a tool or spell); holding R2 or R1 charges the spin attack.
+// L1 presses the left-hand item (C-down: tool or spell). L2 guards with the equipped shield (the game's R button;
+// the shield is gear on the Equipment page, not a slot). D-pad right / left / up / down switch the
+// right hand / left hand / spell / quick item. Triangle is A; while it is held the pouch shows and the D-pad does not
+// switch. The touchpad is L (the game's minimap toggle), the only button that sends L in play. L3 and Create are C-up (first person, Navi), R3 is Z (lock-on).
+// The pause screen and text boxes keep the older layout: R2 = B, L1 and L3 = R, L2 and R3 = Z.
+//
+// Cross jumps. The jump is the game's own ledge jump (the running jump when Link runs forward, the standing jump
+// otherwise, his normal jump voice), started from the item-button check, so the game's rules apply (no jump while
+// carrying something or in a cutscene). One jump until Link has been on the ground for 3 frames; it can still grab
+// ledges.
 // In menus (pause screen, file select / title, text boxes): the D-pad stays the D-pad, so with
 // "D-pad Support on Pause Screen" and "D-pad Support in Text Boxes" on it moves the cursor;
 // Cross confirms (A), Circle goes back (B), and holding R1 (B) while pressing a D-pad direction
 // assigns the highlighted item to that C button.
 #include <libultraship/bridge/consolevariablebridge.h>
 #include "SoulsInput.h"
+#include "SoulsLoadout.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
@@ -30,6 +45,8 @@ extern "C" {
 #include "variables.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 extern PlayState* gPlayState;
+extern u8 gItemSlots[];
+void Interface_LoadItemIcon1(PlayState* play, u16 button);
 }
 
 // Cross pressed in play: jump on the next item-button check (within 2 gameplay frames)
@@ -71,26 +88,124 @@ static u16 SoulsInput_DpadToC(u16 b) {
     return out;
 }
 
+#define BTN_ALL_C (BTN_CUP | BTN_CDOWN | BTN_CLEFT | BTN_CRIGHT)
+
+static bool SoulsInput_InOcarina() {
+    if (gPlayState == nullptr) {
+        return false;
+    }
+    u8 mode = gPlayState->msgCtx.msgMode;
+    return mode >= MSGMODE_OCARINA_STARTING && mode <= MSGMODE_SCARECROW_LONG_RECORDING_START;
+}
+
+static bool IsSword(u8 item) {
+    return item == ITEM_SWORD_KOKIRI || item == ITEM_SWORD_MASTER || item == ITEM_SWORD_BGS ||
+           item == ITEM_SWORD_KNIFE;
+}
+
+static bool IsShield(u8 item) {
+    return item >= ITEM_SHIELD_DEKU && item <= ITEM_SHIELD_MIRROR;
+}
+
+// The current item of a hand, or ITEM_NONE if it cannot be used now (not owned, wrong age)
+static u8 UsableCurrent(SoulsLoadoutKind kind) {
+    u8 item = SoulsLoadout_Current(kind);
+    return (item != ITEM_NONE && SoulsLoadout_CanEquip(kind, item)) ? item : (u8)ITEM_NONE;
+}
+
+// Input state (all in play)
+static u16 sPrevDpad = 0;
+static bool sPrevR1 = false, sPrevL1 = false, sPrevSquare = false;
+
+// Play layout. Returns the N64 buttons the game gets.
+static u16 SoulsInput_Play(u16 in) {
+    // Cross (Modifier 2) is handled by the caller; the touchpad (L) passes through as the minimap toggle
+    u16 out = in & ~(DPAD_BITS | BTN_B | BTN_R | BTN_Z | BTN_ALL_C | BTN_CUSTOM_MODIFIER2);
+    bool triangle = (in & BTN_A) && !(in & BTN_SOULS_MOD1);
+    bool r1 = (in & BTN_B) || (in & BTN_CRIGHT); // R1 or R2: right-hand attack
+    bool l1 = (in & BTN_R) != 0;  // L1
+    bool square = (in & BTN_CLEFT) != 0;
+    bool l2 = (in & BTN_CDOWN) != 0;  // L2
+    SoulsLoadout_SetPouchHeld(triangle);
+
+    // D-pad: switch hands, spell, quick item (not while Triangle is held: that is the pouch)
+    u16 pressed = (in & DPAD_BITS) & ~sPrevDpad;
+    sPrevDpad = in & DPAD_BITS;
+    if (!triangle) {
+        if (pressed & BTN_DRIGHT) SoulsLoadout_Cycle(SL_RIGHT, 1);
+        if (pressed & BTN_DLEFT) SoulsLoadout_Cycle(SL_LEFT, 1);
+        if (pressed & BTN_DUP) SoulsLoadout_Cycle(SL_SPELL, 1);
+        if (pressed & BTN_DDOWN) SoulsLoadout_Cycle(SL_QUICK, 1);
+    }
+
+    u8 right = UsableCurrent(SL_RIGHT);
+    u8 left = UsableCurrent(SL_LEFT);
+
+    // Right hand: a sword is the game's B button, any other item (or the spell) is on C-right
+    if (r1 && right != ITEM_NONE) {
+        out |= IsSword(right) ? BTN_B : BTN_CRIGHT;
+        if (!sPrevR1) SoulsLoadout_NoteUse(SL_RIGHT);
+    }
+    // Left hand (L1): a ranged tool or the catalyst, on C-down (hold to aim, release to fire; the spell casts)
+    if (l1 && left != ITEM_NONE) {
+        out |= BTN_CDOWN;
+        if (!sPrevL1) SoulsLoadout_NoteUse(SL_LEFT);
+    }
+    // L2: guard with the equipped shield (the game's R button), always available
+    if (l2) out |= BTN_R;
+    // Square: the quick item, on C-left
+    if (square) {
+        out |= BTN_CLEFT;
+        if (!sPrevSquare && UsableCurrent(SL_QUICK) != ITEM_NONE) SoulsLoadout_NoteUse(SL_QUICK);
+    }
+    sPrevR1 = r1;
+    sPrevL1 = l1;
+    sPrevSquare = square;
+
+    // L3 and Create: first person look / Navi (the game decides). R3: lock-on.
+    if (in & BTN_CUP) out |= BTN_CUP;
+    if (in & BTN_Z) out |= BTN_Z;
+    return out;
+}
+
 extern "C" void SoulsInput_Transform(u16* buttons) {
     if (!CVarGetInteger(CVAR_SOULS_CONTROLS, 0)) {
         return;
     }
     u16 in = *buttons;
-    u16 out = in & ~(DPAD_BITS | BTN_L);
 
-    if (!SoulsInput_InMenu()) {
-        out |= SoulsInput_DpadToC(in);
-        bool cross = (in & BTN_L) != 0;
+    if (!SoulsInput_InMenu() && !SoulsInput_InOcarina()) {
+        bool cross = (in & BTN_CUSTOM_MODIFIER2) != 0;
         if (cross && !sCrossWasDown && gPlayState != nullptr) {
             sJumpPending = true;
             sJumpFrame = gPlayState->gameplayFrames;
         }
         sCrossWasDown = cross;
-        *buttons = out;
+        *buttons = SoulsInput_Play(in);
+        return;
+    }
+    SoulsLoadout_SetPouchHeld(false);
+    sPrevDpad = in & DPAD_BITS;
+    sPrevR1 = sPrevL1 = sPrevSquare = false;
+
+    if (SoulsInput_InOcarina()) {
+        // The ocarina: the D-pad plays the C notes, Triangle is A
+        sCrossWasDown = (in & BTN_CUSTOM_MODIFIER2) != 0;
+        sJumpPending = false;
+        *buttons = (in & ~(DPAD_BITS | BTN_CUSTOM_MODIFIER2)) | SoulsInput_DpadToC(in);
         return;
     }
 
-    // Menus
+    // Menus: R2 = B, L2 = Z, L3 = R, as before the loadout. Cross (Modifier 2) confirms; the touchpad does nothing.
+    bool crossDown = (in & BTN_CUSTOM_MODIFIER2) != 0;
+    in &= ~(BTN_CUSTOM_MODIFIER2 | BTN_L);
+    if (crossDown) in |= BTN_L; // below, BTN_L means Cross
+    u16 conv = in & ~(BTN_CRIGHT | BTN_CDOWN | BTN_CUP);
+    if (in & BTN_CRIGHT) conv |= BTN_B;
+    if (in & BTN_CDOWN) conv |= BTN_Z;
+    if (in & BTN_CUP) conv |= BTN_R;
+    in = conv;
+    u16 out = in & ~(DPAD_BITS | BTN_L);
     if ((in & BTN_B) && (in & DPAD_BITS)) {
         // R1 + direction: equip the highlighted item to that C button
         out &= ~BTN_B;
@@ -160,3 +275,143 @@ static void RegisterSoulsJumpReset() {
 
 static RegisterShipInitFunc initSoulsJump(RegisterSoulsJump, { CVAR_SOULS_CONTROLS });
 static RegisterShipInitFunc initSoulsJumpReset(RegisterSoulsJumpReset, { CVAR_SOULS_CONTROLS });
+
+// MARK: - Loadout -> the game's button slots (every player update)
+
+static void SetButton(int button, u8 item, u8 slot) {
+    gSaveContext.equips.buttonItems[button] = item;
+    gSaveContext.equips.cButtonSlots[button - 1] = slot;
+}
+
+// The arrow item on the bow button for the chosen arrow slot (plain bow if none, no magic or not owned)
+static u8 BowItemForArrow(u8 arrow, u8* slot) {
+    *slot = SLOT_BOW;
+    if (arrow == ITEM_NONE || !gSaveContext.isMagicAcquired || gSaveContext.magic == 0 ||
+        !SoulsLoadout_CanEquip(SL_ARROW, arrow)) {
+        return ITEM_BOW;
+    }
+    *slot = gItemSlots[arrow];
+    return arrow == ITEM_ARROW_FIRE ? ITEM_BOW_ARROW_FIRE : (arrow == ITEM_ARROW_ICE ? ITEM_BOW_ARROW_ICE : ITEM_BOW_ARROW_LIGHT);
+}
+
+// What a hand puts on its C button: the spell if it holds the catalyst, else the tool. Shields and swords put nothing.
+static void ToolOnButton(u8 hand, u8* item, u8* slot) {
+    *item = ITEM_NONE;
+    *slot = SLOT_NONE;
+    if (hand == ITEM_NONE || IsSword(hand) || IsShield(hand)) {
+        return;
+    }
+    if (hand == SOULS_ITEM_CATALYST) {
+        u8 spell = UsableCurrent(SL_SPELL);
+        if (spell != ITEM_NONE) {
+            *item = spell;
+            *slot = gItemSlots[spell];
+        }
+    } else if (hand == ITEM_BOW) {
+        *item = BowItemForArrow(UsableCurrent(SL_ARROW), slot);
+    } else {
+        *item = hand;
+        *slot = gItemSlots[hand];
+    }
+}
+
+static void QuickOnButton(u8* item, u8* slot) {
+    *item = ITEM_NONE;
+    *slot = SLOT_NONE;
+    u8 quick = UsableCurrent(SL_QUICK);
+    if (quick == ITEM_NONE || quick == SOULS_ITEM_EPONA) {
+        return;
+    }
+    if (quick >= ITEM_BOTTLE && quick <= ITEM_POE) {
+        for (int s = SLOT_BOTTLE_1; s <= SLOT_BOTTLE_4; s++) {
+            if (gSaveContext.inventory.items[s] == quick) {
+                *item = quick;
+                *slot = s;
+                return;
+            }
+        }
+        return;
+    }
+    *item = quick;
+    *slot = gItemSlots[quick];
+}
+
+// If the active slot of a list cannot be used now (age, item gone) move to a slot that can
+static void SkipUnusable(SoulsLoadoutKind kind) {
+    u8 cur = SoulsLoadout_Current(kind);
+    if (cur == ITEM_NONE || SoulsLoadout_CanEquip(kind, cur)) {
+        return;
+    }
+    for (int i = 0; i < SoulsLoadout_Capacity(kind); i++) {
+        u8 item = SoulsLoadout_Get(kind, i);
+        if (item != ITEM_NONE && SoulsLoadout_CanEquip(kind, item)) {
+            SoulsLoadout_Cycle(kind, 1);
+            return;
+        }
+    }
+}
+
+static void EquipSword(PlayState* play, Player* player, u8 sword) {
+    int value = sword == ITEM_SWORD_KOKIRI ? EQUIP_VALUE_SWORD_KOKIRI
+                                           : (sword == ITEM_SWORD_MASTER ? EQUIP_VALUE_SWORD_MASTER : EQUIP_VALUE_SWORD_BIGGORON);
+    gSaveContext.equips.buttonItems[0] = sword;
+    Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, value);
+    gSaveContext.infTable[29] = 0;
+    if (sword == ITEM_SWORD_BGS) {
+        gSaveContext.swordHealth = 8;
+    }
+    Interface_LoadItemIcon1(play, 0);
+    // A drawn sword changes into the new one
+    if (player->heldItemAction >= PLAYER_IA_SWORD_MASTER && player->heldItemAction <= PLAYER_IA_SWORD_BIGGORON) {
+        s8 action = sword == ITEM_SWORD_KOKIRI ? PLAYER_IA_SWORD_KOKIRI
+                                               : (sword == ITEM_SWORD_MASTER ? PLAYER_IA_SWORD_MASTER : PLAYER_IA_SWORD_BIGGORON);
+        player->heldItemId = sword;
+        player->heldItemAction = action;
+        player->itemAction = action;
+    }
+    Player_SetEquipmentData(play, player);
+}
+
+static void SyncLoadout() {
+    if (gPlayState == nullptr) {
+        return;
+    }
+    Player* player = GET_PLAYER(gPlayState);
+    if (player == nullptr) {
+        return;
+    }
+    // The hookshot slot turns into the longshot when it is upgraded
+    for (int i = 0; i < SoulsLoadout_Capacity(SL_LEFT); i++) {
+        if (SoulsLoadout_Get(SL_LEFT, i) == ITEM_HOOKSHOT && INV_CONTENT(ITEM_HOOKSHOT) == ITEM_LONGSHOT) {
+            SoulsLoadout_Set(SL_LEFT, i, ITEM_LONGSHOT);
+        }
+    }
+    for (int k = SL_RIGHT; k <= SL_QUICK; k++) {
+        SkipUnusable((SoulsLoadoutKind)k);
+    }
+
+    // Sword and shield follow the hands (not in the middle of a swing or a guard)
+    bool busy = player->meleeWeaponState != 0 || (player->stateFlags1 & (PLAYER_STATE1_SHIELDING | PLAYER_STATE1_IN_CUTSCENE)) ||
+                gPlayState->csCtx.state != CS_STATE_IDLE;
+    u8 right = UsableCurrent(SL_RIGHT);
+    u8 left = UsableCurrent(SL_LEFT);
+    if (!busy) {
+        if (IsSword(right) && gSaveContext.equips.buttonItems[0] != right) {
+            EquipSword(gPlayState, player, right);
+        }
+    }
+
+    u8 item, slot;
+    QuickOnButton(&item, &slot);
+    SetButton(1, item, slot);
+    ToolOnButton(left, &item, &slot);
+    SetButton(2, item, slot);
+    ToolOnButton(right, &item, &slot);
+    SetButton(3, item, slot);
+}
+
+static void RegisterSoulsLoadoutSync() {
+    COND_HOOK(OnPlayerUpdate, CVarGetInteger(CVAR_SOULS_CONTROLS, 0), []() { SyncLoadout(); });
+}
+
+static RegisterShipInitFunc initSoulsLoadoutSync(RegisterSoulsLoadoutSync, { CVAR_SOULS_CONTROLS });
