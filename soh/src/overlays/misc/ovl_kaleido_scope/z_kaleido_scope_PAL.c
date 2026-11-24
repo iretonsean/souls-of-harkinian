@@ -1,4 +1,5 @@
 #include "z_kaleido_scope.h"
+#include "soh/Enhancements/controls/SoulsEquipPage.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -1756,7 +1757,7 @@ void KaleidoScope_DrawPages(PlayState* play, GraphicsContext* gfxCtx) {
 
                 KaleidoScope_DrawEquipment(play);
 
-                if (pauseCtx->cursorSpecialPos == 0) {
+                if (pauseCtx->cursorSpecialPos == 0 && !SoulsEquipPage_Active()) {
                     KaleidoScope_DrawCursor(play, PAUSE_EQUIP);
                 }
                 break;
@@ -3520,7 +3521,13 @@ void KaleidoScope_Draw(PlayState* play) {
 
         Gfx_SetupDL_42Opa(play->state.gfxCtx);
         KaleidoScope_InitVertices(play, play->state.gfxCtx);
-        KaleidoScope_DrawPages(play, play->state.gfxCtx);
+        if (SoulsEquipPage_Shown(play)) {
+            // Souls of Harkinian: the Equipment page is a full screen of its own: no cube, no other pages. Only Link's
+            // frame buffer is drawn (inside DrawEquipment).
+            KaleidoScope_DrawEquipment(play);
+        } else {
+            KaleidoScope_DrawPages(play, play->state.gfxCtx);
+        }
 
         Gfx_SetupDL_42Opa(play->state.gfxCtx);
         gDPSetCombineLERP(POLY_OPA_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
@@ -3528,9 +3535,12 @@ void KaleidoScope_Draw(PlayState* play) {
 
         KaleidoScope_SetView(pauseCtx, 0.0f, 0.0f, 64.0f);
 
-        if (!((pauseCtx->state >= 8) && (pauseCtx->state <= 0x11))) {
+        if (!((pauseCtx->state >= 8) && (pauseCtx->state <= 0x11)) && !SoulsEquipPage_Shown(play)) {
             KaleidoScope_DrawInfoPanel(play);
         }
+
+        // Souls of Harkinian: the Equipment page of the Elden Ring system, over the pause screen
+        SoulsEquipPage_Draw(play);
     }
 
     if ((pauseCtx->state >= 0xB) && (pauseCtx->state <= 0x11)) {
@@ -3857,7 +3867,9 @@ void KaleidoScope_Update(PlayState* play) {
             pauseCtx->stickRelX = input->rel.stick_x;
             pauseCtx->stickRelY = input->rel.stick_y;
             KaleidoScope_UpdateCursorSize(&play->pauseCtx);
-            KaleidoScope_HandlePageToggles(pauseCtx, input);
+            if (!SoulsEquipPage_BlocksPageTurn(play)) {
+                KaleidoScope_HandlePageToggles(pauseCtx, input);
+            }
         } else if ((pauseCtx->pageIndex == PAUSE_QUEST) && ((pauseCtx->unk_1E4 < 3) || (pauseCtx->unk_1E4 == 5))) {
             KaleidoScope_UpdateCursorSize(&play->pauseCtx);
         }
@@ -3866,6 +3878,9 @@ void KaleidoScope_Update(PlayState* play) {
             KaleidoScope_UpdateNamePanel(play);
         }
     }
+
+    // Souls of Harkinian: the Equipment page takes its input here (before the pause state machine below)
+    SoulsEquipPage_Update(play);
 
     switch (pauseCtx->state) {
         case 3:
@@ -4266,7 +4281,7 @@ void KaleidoScope_Update(PlayState* play) {
                         pauseCtx->state = 0x12;
                         WREG(2) = -6240;
                         func_800F64E0(0);
-                    } else if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
+                    } else if (CHECK_BTN_ALL(input->press.button, BTN_B) && !SoulsEquipPage_ConsumesBack(play)) {
                         pauseCtx->mode = 0;
                         pauseCtx->promptChoice = 0;
                         Audio_PlaySfxGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,

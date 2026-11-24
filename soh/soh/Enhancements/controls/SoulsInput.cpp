@@ -168,11 +168,18 @@ static u16 SoulsInput_Play(u16 in) {
     return out;
 }
 
+// The pad buttons before the Souls layout changes them (the Equipment page tells Triangle from Cross with this:
+// in menus both become A).
+extern "C" {
+uint16_t gSoulsRawPadButtons = 0;
+}
+
 extern "C" void SoulsInput_Transform(u16* buttons) {
     if (!CVarGetInteger(CVAR_SOULS_CONTROLS, 0)) {
         return;
     }
     u16 in = *buttons;
+    gSoulsRawPadButtons = in;
 
     if (!SoulsInput_InMenu() && !SoulsInput_InOcarina()) {
         bool cross = (in & BTN_CUSTOM_MODIFIER2) != 0;
