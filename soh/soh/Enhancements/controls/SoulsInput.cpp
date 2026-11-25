@@ -133,7 +133,7 @@ static u32 sSlashFrame = 0;
 static bool sForceAttack = false; // press the right-hand attack for a few game frames
 // Attack while guarding: the shield comes down for the attack and goes back up after it while L2 is still held
 static bool sPrevAttack = false, sGuardWasUp = false;
-static u32 sAttackStartFrame = 0;
+static u32 sAttackStartFrame = 0, sAttackEndFrame = 0;
 static const u32 kGuardResumeFrames = 8; // game frames after the attack input before the guard comes back
 static u32 sForceAttackFrame = 0;
 static const int kR2HoldMs = 160; // a R2 press shorter than this is a tap
@@ -149,18 +149,23 @@ static bool sTriPrev = false, sASent = false, sTriUsed = false, sTapActive = fal
 static std::chrono::steady_clock::time_point sTriStart, sTapStart;
 static u32 sTapFrame = 0;
 static const int kTapWindowMs = 70;
-// "Talk" with the sword out: one Triangle tap puts the sword away, then A goes out by itself and the talk starts
-static bool sTalkChain = false;
-static u32 sTalkChainFrame = 0;
-static const u32 kTalkChainMaxFrames = 30;
-
-static bool SwordOut(Player* player) {
-    return player->heldItemAction >= PLAYER_IA_SWORD_MASTER && player->heldItemAction <= PLAYER_IA_SWORD_BIGGORON;
-}
-
 static bool sMenuTriPrev = false; // Triangle in a text box
 static std::chrono::steady_clock::time_point sMenuTriStart;
 static const int kTextSkipHoldMs = 300;
+// Swimming (not walking with the Iron Boots) or a dive offered: Triangle is a plain A (the game dives while A is
+// held) and the pouch is off
+static bool TriangleIsPlainA() {
+    if (gPlayState == nullptr) {
+        return false;
+    }
+    Player* player = GET_PLAYER(gPlayState);
+    u16 action = gPlayState->interfaceCtx.unk_1F0;
+    bool diveOffered = action == DO_ACTION_DIVE || (action >= DO_ACTION_1 && action <= DO_ACTION_8);
+    bool swimming = (player->stateFlags1 & PLAYER_STATE1_IN_WATER) && player->currentBoots != PLAYER_BOOTS_IRON &&
+                    player->currentBoots != PLAYER_BOOTS_IRON_UNDERWATER;
+    return diveOffered || swimming || (player->stateFlags2 & (PLAYER_STATE2_DIVING | PLAYER_STATE2_UNDERWATER));
+}
+
 static const int kTapMaxMs = 350; // a longer Triangle hold that ends without a D-pad press is a look at the pouch, not A
 
 // The action shown on Triangle needs A held down (grab a block to push or pull it)
@@ -348,11 +353,23 @@ static u16 SoulsInput_Play(u16 in) {
     bool l1 = (in & BTN_R) != 0;  // L1
     bool square = (in & BTN_CLEFT) != 0;
     bool l2 = (in & BTN_CDOWN) != 0;  // L2
-    SoulsLoadout_SetPouchHeld(triangle);
+    bool plainA = TriangleIsPlainA();
+    SoulsLoadout_SetPouchHeld(triangle && !plainA);
 
     // D-pad: switch hands, spell, quick item (not while Triangle is held: that is the pouch)
     u16 pressed = (in & DPAD_BITS) & ~sPrevDpad;
     sPrevDpad = in & DPAD_BITS;
+    if (plainA) {
+        // in the water: Triangle is A (press and hold: dive), no pouch
+        if (triangle) {
+            out |= BTN_A;
+        }
+        sTriPrev = triangle;
+        sASent = triangle;
+        sTriUsed = true; // a release here is not a tap
+        sTapActive = false;
+        triangle = false;
+    }
     if (triangle && !sTriPrev) {
         sTriStart = now;
         sASent = false;
@@ -395,25 +412,6 @@ static u16 SoulsInput_Play(u16 in) {
         sTriUsed = false;
         sASent = false;
     }
-    if (gPlayState != nullptr) {
-        Player* player = GET_PLAYER(gPlayState);
-        bool talkOffered = gPlayState->interfaceCtx.unk_1F0 == DO_ACTION_SPEAK;
-        if (sendA && talkOffered && SwordOut(player)) {
-            sendA = false; // put the sword away first; A follows when it's away
-            if (player->heldItemAction == player->itemAction) {
-                Player_UseItem(gPlayState, player, ITEM_NONE);
-            }
-            sTalkChain = true;
-            sTalkChainFrame = GameFrame();
-        } else if (sTalkChain) {
-            if (!SwordOut(player) && talkOffered) {
-                sendA = true;
-                sTalkChain = false;
-            } else if (GameFrame() - sTalkChainFrame > kTalkChainMaxFrames) {
-                sTalkChain = false;
-            }
-        }
-    }
     if (sendA) out |= BTN_A;
     sTriPrev = triangle;
     if (!triangle && !ItemInUseNow()) {
@@ -441,12 +439,15 @@ static u16 SoulsInput_Play(u16 in) {
     // L2: guard with the equipped shield (the game's R button), always available. An attack (R1 / R2) while guarding
     // lowers the shield first (one game frame with neither, so Link leaves the guard), then attacks; the guard comes
     // back kGuardResumeFrames after the attack input ends if L2 is still held.
-    bool attackNow = r1 || sSlashPending;
+    bool attackNow = (r1 && (right != ITEM_NONE || temporaryB)) || sSlashPending;
     if (attackNow && !sPrevAttack) {
         sAttackStartFrame = GameFrame();
     }
+    if (attackNow) {
+        sAttackEndFrame = GameFrame();
+    }
     sPrevAttack = attackNow;
-    bool guardDown = attackNow || GameFrame() - sAttackStartFrame < kGuardResumeFrames;
+    bool guardDown = attackNow || GameFrame() - sAttackEndFrame < kGuardResumeFrames;
     if (l2 && !guardDown) {
         out |= BTN_R;
     }
@@ -520,7 +521,6 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     sPrevDpad = in & DPAD_BITS;
     sPrevR1 = sPrevL1 = sPrevSquare = sPrevR2 = false;
     sPrevAttack = sGuardWasUp = false;
-    sTalkChain = false;
     sSlashPending = false;
 
     if (SoulsInput_InOcarina()) {

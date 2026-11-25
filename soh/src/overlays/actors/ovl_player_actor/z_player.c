@@ -5825,11 +5825,14 @@ void func_8083AA10(Player* this, PlayState* play) {
                         }
                     }
 
-                    // Souls of Harkinian: Cross is the jump, so Link doesn't jump by himself at an edge (he falls)
-                    if (!SoulsInput_NoAutoJump()) {
+                    // Souls of Harkinian: Cross is the jump, so Link doesn't jump by himself at an edge: he falls (no
+                    // ledge grab). While carrying something Cross can't jump, so the game's jump stays.
+                    if (!SoulsInput_NoAutoJump() || (this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR)) {
                         func_8083A4A8(this, play);
                         return;
                     }
+                    Player_AnimPlayLoop(play, this, &gPlayerAnim_link_normal_landing_wait);
+                    return;
                 }
 
                 if ((sPrevFloorProperty == FLOOR_PROPERTY_9) || (sYDistToFloor <= this->ageProperties->unk_34) ||
