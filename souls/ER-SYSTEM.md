@@ -48,6 +48,10 @@ The A, B and C buttons are no longer used for items in play. Menus keep the exis
 - Two swords, one per hand: the game still has one sword on B. Pressing a hand's button with the other hand's sword
   on B puts a drawn sword away, switches the sword, and then the swing goes out once (the press is queued, not lost).
   While guarding (L2), an attack with either hand's sword lowers the shield first.
+- Switching with an item out: if the old item is in Link's hand (sword drawn, Deku Stick, Hammer) and the player
+  switches it with the D-pad, or a hand button switches the sword, the new sword, stick or hammer comes out ready
+  (the game's own item change, no swing and no separate draw press). Switching to a ranged tool or the catalyst puts
+  the old item away. With nothing out, switching draws nothing.
 - A two-handed weapon (Giant's Knife, Biggoron Sword) in the right hand puts the shield on the back, as in OoT.
 - Old saves: on the first load, the slots are filled once from what the player has equipped (sword, C items; the shield
   stays the equipped shield), so
