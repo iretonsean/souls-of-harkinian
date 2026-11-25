@@ -461,6 +461,11 @@ static bool Flashing(PlayState* play, SoulsLoadoutKind kind) {
 
 // One slot, w x h units: a soft dark panel with a darker halo, no border. The flash darkens the panel and adds a soft warm
 // glow inside it. Icon at 84 % of the smaller side, centred; ammo digits in the bottom right corner.
+// The game disables a button (BTN_DISABLED) when its item can't be used now: 0 = B, 1 = C-left, 2 = C-down, 3 = C-right
+static bool ButtonOff(int i) {
+    return gSaveContext.buttonStatus[i] == BTN_DISABLED;
+}
+
 static void DrawSlot(PlayState* play, float x, float y, float w, float h, uint8_t item, bool dim, bool flash,
                      bool showAmmo = true) {
     DrawGen(play, sSlotHalo, 56, 64, x - 4.0f, y - 4.0f, w + 8.0f, h + 8.0f, 0, 0, 0, A(255));
@@ -526,10 +531,18 @@ static void DrawCross(PlayState* play, float left, float bottom, bool testFlash)
         return;
     }
     bool spellOn = SoulsLoadout_HasCatalyst();
-    DrawSlot(play, colM, yTop, sw, sh, SoulsLoadout_Current(SL_SPELL), !spellOn, Flashing(play, SL_SPELL));
-    DrawSlot(play, colL, ySide, sw, sh, SoulsLoadout_Current(SL_LEFT), false, Flashing(play, SL_LEFT));
-    DrawSlot(play, colR, ySide, sw, sh, SoulsLoadout_Current(SL_RIGHT), false, testFlash || Flashing(play, SL_RIGHT));
-    DrawSlot(play, colM, yBot, sw, sh, SoulsLoadout_Current(SL_QUICK), false, Flashing(play, SL_QUICK));
+    // A slot is dimmed when the game disables the button its item is on (swimming, some rooms, shops...): the right
+    // hand's sword is on B, other right-hand items on C-right, the left hand on C-down, the quick item on C-left
+    // Either hand can hold a sword (B), the right hand's other items are on C-right, the left hand's on C-down.
+    uint8_t rightItem = SoulsLoadout_Current(SL_RIGHT), leftItem = SoulsLoadout_Current(SL_LEFT);
+    auto isSword = [](uint8_t it) { return it >= ITEM_SWORD_KOKIRI && it <= ITEM_SWORD_BGS; };
+    bool rightOff = ButtonOff(isSword(rightItem) ? 0 : 3), leftOff = ButtonOff(isSword(leftItem) ? 0 : 2);
+    bool quickOff = ButtonOff(1);
+    bool catalystOff = rightItem == SOULS_ITEM_CATALYST ? rightOff : leftOff; // the spell is on the catalyst hand's button
+    DrawSlot(play, colM, yTop, sw, sh, SoulsLoadout_Current(SL_SPELL), !spellOn || catalystOff, Flashing(play, SL_SPELL));
+    DrawSlot(play, colL, ySide, sw, sh, leftItem, leftOff, Flashing(play, SL_LEFT));
+    DrawSlot(play, colR, ySide, sw, sh, rightItem, rightOff, testFlash || Flashing(play, SL_RIGHT));
+    DrawSlot(play, colM, yBot, sw, sh, SoulsLoadout_Current(SL_QUICK), quickOff, Flashing(play, SL_QUICK));
     // previews of the next spell and the next quick item, 80 % opacity
     const float ps = sh * 0.45f, pw = ps * 0.83f, px = colM + sw + g * 0.6f;
     int saved = sAlpha;
