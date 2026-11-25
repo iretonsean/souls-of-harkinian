@@ -97,8 +97,8 @@ const ItemInfo kItems[] = {
     { ITEM_SHIELD_DEKU, "Deku Shield", "Child. Wooden. Burns." },
     { ITEM_SHIELD_HYLIAN, "Hylian Shield", "Blocks most attacks." },
     { ITEM_SHIELD_MIRROR, "Mirror Shield", "Adult. Reflects light and magic." },
-    { ITEM_SLINGSHOT, "Fairy Slingshot", "Child. Hold L1 to aim, release to fire." },
-    { ITEM_BOW, "Fairy Bow", "Adult. Hold L1 to aim, release to fire." },
+    { ITEM_SLINGSHOT, "Fairy Slingshot", "Child. In a hand, hold its button to aim, release to fire." },
+    { ITEM_BOW, "Fairy Bow", "Adult. In a hand, hold its button to aim, release to fire." },
     { ITEM_HOOKSHOT, "Hookshot", "Adult. Pulls you to targets." },
     { ITEM_LONGSHOT, "Longshot", "Adult. A longer Hookshot." },
     { ITEM_BOOMERANG, "Boomerang", "Child. Stuns enemies, grabs items." },
@@ -163,10 +163,10 @@ const ItemInfo kItems[] = {
 };
 
 // Every item a kind can hold, in list order. The list shows the ones the player owns and can use (CanEquip).
-const uint8_t kCatRight[] = { ITEM_SWORD_KOKIRI, ITEM_SWORD_MASTER, ITEM_SWORD_BGS,
-                              ITEM_SWORD_KNIFE,  ITEM_HAMMER,       ITEM_STICK };
-const uint8_t kCatLeft[] = { ITEM_SLINGSHOT, ITEM_BOW,       ITEM_HOOKSHOT,
-                             ITEM_LONGSHOT,  ITEM_BOOMERANG, SOULS_ITEM_CATALYST };
+// Both hands list every armament.
+const uint8_t kCatHand[] = { ITEM_SWORD_KOKIRI, ITEM_SWORD_MASTER, ITEM_SWORD_BGS,  ITEM_SWORD_KNIFE,
+                             ITEM_HAMMER,       ITEM_STICK,        ITEM_SLINGSHOT, ITEM_BOW,
+                             ITEM_HOOKSHOT,     ITEM_LONGSHOT,     ITEM_BOOMERANG, SOULS_ITEM_CATALYST };
 const uint8_t kCatShield[] = { ITEM_SHIELD_DEKU, ITEM_SHIELD_HYLIAN, ITEM_SHIELD_MIRROR };
 const uint8_t kCatSpell[] = { ITEM_DINS_FIRE, ITEM_FARORES_WIND, ITEM_NAYRUS_LOVE };
 const uint8_t kCatArrow[] = { ITEM_ARROW_FIRE, ITEM_ARROW_ICE, ITEM_ARROW_LIGHT };
@@ -195,9 +195,8 @@ struct CatRef {
 CatRef CatOf(int kind) {
     switch (kind) {
         case SL_RIGHT:
-            return CAT(kCatRight);
         case SL_LEFT:
-            return CAT(kCatLeft);
+            return CAT(kCatHand);
         case SL_SPELL:
             return CAT(kCatSpell);
         case SL_ARROW:
@@ -461,6 +460,11 @@ void ListConfirm() {
     if (at >= 0) {
         SoulsLoadout_Set(kind, at, ITEM_NONE); // equipped: Cross removes it
         Sfx(NA_SE_SY_DECIDE);
+        return;
+    }
+    if (SoulsLoadout_OtherHandIndexOf(kind, id) >= 0) {
+        sErrUntil = sFrame + 10; // one copy per item: it is in the other hand, remove it there first
+        Sfx(NA_SE_SY_ERROR);
         return;
     }
     if (SoulsLoadout_Count(kind) >= SoulsLoadout_Capacity(kind)) {
@@ -1081,7 +1085,8 @@ static void DrawListPage(GraphicsContext* gfx) {
     int cap = Capacity(kind), n = EquippedCount(kind);
     bool multi = cap > 1, full = multi && n >= cap;
     bool onCur = EquippedIndex(kind, cur) >= 0;
-    bool blocked = full && !onCur;
+    bool inOtherHand = SoulsLoadout_OtherHandIndexOf((SoulsLoadoutKind)kind, cur) >= 0;
+    bool blocked = (full && !onCur) || inOtherHand;
 
     Window(gfx, 8, 18, 188, 196);
     Text(gfx, KindName(kind), 20, 22, kGold[0], kGold[1], kGold[2], 0.7f);
@@ -1098,7 +1103,8 @@ static void DrawListPage(GraphicsContext* gfx) {
     for (size_t i = 0; i < list.size(); i++) {
         float x = 20 + (int)(i % cols) * st, y = 40 + (int)(i / cols) * st;
         gridBottom = y + c;
-        bool on = EquippedIndex(kind, list[i]) >= 0, off = full && !on;
+        bool on = EquippedIndex(kind, list[i]) >= 0,
+             off = (full && !on) || SoulsLoadout_OtherHandIndexOf((SoulsLoadoutKind)kind, list[i]) >= 0;
         DrawSlot(gfx, x, y, c, list[i], on, off, c * 0.1f);
     }
     {
@@ -1115,15 +1121,18 @@ static void DrawListPage(GraphicsContext* gfx) {
     }
 
     char note[48] = "";
-    if (blocked) {
+    if (inOtherHand) {
+        snprintf(note, sizeof(note), "In the %s hand. Remove it there first.", kind == SL_RIGHT ? "left" : "right");
+    } else if (blocked) {
         snprintf(note, sizeof(note), "All %d slots are full. Remove one first.", cap);
     }
-    if (kind == SL_RIGHT && Weapon(cur) != nullptr) {
-        uint8_t base = SoulsLoadout_Get(SL_RIGHT, sOpenIdx);
-        if (base == ITEM_NONE) {
-            base = SoulsLoadout_Current(SL_RIGHT);
+    if ((kind == SL_RIGHT || kind == SL_LEFT) && Weapon(cur) != nullptr) {
+        // compare against the weapon in the open slot (else the hand's current weapon, else the Kokiri Sword)
+        uint8_t base = SoulsLoadout_Get((SoulsLoadoutKind)kind, sOpenIdx);
+        if (base == ITEM_NONE || Weapon(base) == nullptr) {
+            base = SoulsLoadout_Current((SoulsLoadoutKind)kind);
         }
-        if (base == ITEM_NONE) {
+        if (base == ITEM_NONE || Weapon(base) == nullptr) {
             base = ITEM_SWORD_KOKIRI;
         }
         DrawStatCard(gfx, cur, base, 202, 18);

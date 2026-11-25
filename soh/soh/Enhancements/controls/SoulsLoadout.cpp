@@ -420,6 +420,11 @@ void Load() {
             }
         }
     }
+    for (int i = 0; i < kCap[SL_LEFT]; i++) { // one copy per item: a copy in both hands stays in the right hand
+        if (sSlots[SL_LEFT][i] != ITEM_NONE && SoulsLoadout_IndexOf(SL_RIGHT, sSlots[SL_LEFT][i]) >= 0) {
+            sSlots[SL_LEFT][i] = ITEM_NONE;
+        }
+    }
     int filled = 0;
     SaveManager::Instance->LoadData("filled", filled, 0);
     sFilled = filled != 0; // lists without the flag (old versions, or saved before the fill) get the fill again
@@ -512,6 +517,11 @@ extern "C" void SoulsLoadout_Set(SoulsLoadoutKind kind, int slot, uint8_t item) 
     if (other >= 0) {
         sSlots[kind][other] = ITEM_NONE;
     }
+    // One copy per item: a hand item leaves the other hand when it goes into this one
+    int inOther = SoulsLoadout_OtherHandIndexOf(kind, item);
+    if (inOther >= 0) {
+        sSlots[kind == SL_RIGHT ? SL_LEFT : SL_RIGHT][inOther] = ITEM_NONE;
+    }
     sSlots[kind][slot] = item;
 }
 extern "C" int SoulsLoadout_Count(SoulsLoadoutKind kind) {
@@ -568,7 +578,13 @@ extern "C" int SoulsLoadout_QuestOrder(uint8_t* out, int max) {
     return n;
 }
 extern "C" bool SoulsLoadout_HasCatalyst(void) {
-    return SoulsLoadout_Current(SL_LEFT) == SOULS_ITEM_CATALYST; // the catalyst only goes in the left hand
+    return SoulsLoadout_Current(SL_LEFT) == SOULS_ITEM_CATALYST || SoulsLoadout_Current(SL_RIGHT) == SOULS_ITEM_CATALYST;
+}
+extern "C" int SoulsLoadout_OtherHandIndexOf(SoulsLoadoutKind kind, uint8_t item) {
+    if (kind != SL_RIGHT && kind != SL_LEFT) {
+        return -1;
+    }
+    return SoulsLoadout_IndexOf(kind == SL_RIGHT ? SL_LEFT : SL_RIGHT, item);
 }
 extern "C" bool SoulsLoadout_CanEquip(SoulsLoadoutKind kind, uint8_t item) {
     if (!Valid(kind) || item == ITEM_NONE) {
@@ -576,9 +592,8 @@ extern "C" bool SoulsLoadout_CanEquip(SoulsLoadoutKind kind, uint8_t item) {
     }
     switch (kind) {
         case SL_RIGHT:
-            return CanEquipRight(item);
-        case SL_LEFT:
-            return CanEquipLeft(item);
+        case SL_LEFT: // both hands take every armament
+            return CanEquipRight(item) || CanEquipLeft(item);
         case SL_SPELL:
             return (item == ITEM_DINS_FIRE || item == ITEM_FARORES_WIND || item == ITEM_NAYRUS_LOVE) &&
                    InInventory(item);

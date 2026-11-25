@@ -10,8 +10,9 @@ exists. No text on the play HUD.
 
 | Button | Action |
 |---|---|
-| R1 / R2 | Right-hand armament: attack / strong attack (OoT jump attack). Hold R2 = charged spin attack |
-| L1 | Left-hand item: Slingshot, Bow, Hookshot, Longshot, Boomerang = hold to aim, release to fire. Catalyst = cast the current spell |
+| R1 | Right-hand armament (any armament can be in either hand). Sword = swing (B); hold = charged spin attack. Slingshot, Bow, Hookshot, Longshot, Boomerang, Hammer, Deku Stick = that hand's C button (hold to aim, release to fire). Catalyst = cast the current spell |
+| L1 | The same for the left-hand armament (C-down for a non-sword item, B for a sword) |
+| R2 | With a sword in the right hand: tap = strong attack (OoT jump attack), hold = charged spin attack. Otherwise the same as R1 |
 | L2 | Guard with the equipped shield (OoT's R). Always available, as in OoT; not with a two-handed sword |
 | D-pad right / left | Switch right / left hand to its next filled slot |
 | D-pad up | Switch the current spell |
@@ -33,8 +34,8 @@ The A, B and C buttons are no longer used for items in play. Menus keep the exis
 
 | Kind | Slots | Items |
 |---|---|---|
-| Right hand | 3 | Kokiri Sword, Master Sword, Giant's Knife, Biggoron Sword, Broken Knife, Megaton Hammer, Deku Stick (later: the 13 pack swords) |
-| Left hand | 3 | Fairy Slingshot, Fairy Bow, Hookshot, Longshot, Boomerang, catalyst ("Fairy Magic") |
+| Right hand | 3 | Any armament: Kokiri Sword, Master Sword, Giant's Knife, Biggoron Sword, Megaton Hammer, Deku Stick, Fairy Slingshot, Fairy Bow, Hookshot, Longshot, Boomerang, catalyst ("Fairy Magic") (later: the 13 pack swords) |
+| Left hand | 3 | The same list as the right hand |
 | Spells | 3 | Din's Fire, Farore's Wind, Nayru's Love. Cast only while the catalyst is the current item of a hand |
 | Arrows | 2 | Fire, Ice, Light Arrows (used by the bow) |
 | Shield / Tunic / Boots | 1 each | OoT's equipment, chosen on the Equipment page (the shield is always on Link's arm, guarded with L2) |
@@ -42,7 +43,15 @@ The A, B and C buttons are no longer used for items in play. Menus keep the exis
 | Pouch | 4 | Tools: both ocarinas, Lens of Truth, Iron / Hover Boots (toggle), Magic Beans, all masks, all trade items |
 
 - Lists only offer items the player owns and can use at the current age (game logic decides).
-- An item can sit in one slot of its kind only.
+- An item can sit in one slot of its kind only. The two hands count as one kind for this: an armament is in one hand
+  at a time (the Equipment page refuses it in the other hand, see section 4).
+- Two swords, one per hand: the game still has one sword on B. Pressing a hand's button with the other hand's sword
+  on B puts a drawn sword away, switches the sword, and then the swing goes out once (the press is queued, not lost).
+  While guarding (L2), an attack with either hand's sword lowers the shield first.
+- Switching with an item out: if the old item is in Link's hand (sword drawn, Deku Stick, Hammer) and the player
+  switches it with the D-pad, or a hand button switches the sword, the new sword, stick or hammer comes out ready
+  (the game's own item change, no swing and no separate draw press). Switching to a ranged tool or the catalyst puts
+  the old item away. With nothing out, switching draws nothing.
 - A two-handed weapon (Giant's Knife, Biggoron Sword) in the right hand puts the shield on the back, as in OoT.
 - Old saves: on the first load, the slots are filled once from what the player has equipped (sword, C items; the shield
   stays the equipped shield), so
@@ -80,6 +89,9 @@ Replaces OoT's equipment subscreen in the pause menu. Elden Ring layout, OoT loo
 
 - Rows: Armaments (right hand 1-3, left hand 1-3), Magic & Gear (spells 1-3, arrows 1-2, shield, tunic, boots), Quick Items 1-8,
   Pouch 1-4. Right panel: Link and his status.
+- Right Hand and Left Hand lists both show every armament the player owns. An armament that is in the other hand is
+  dimmed and Cross on it is refused (red flash, "In the left hand. Remove it there first."); the compare card compares
+  against the weapon in the opened slot.
 - Selected slot: steady gold frame with a glow (no pulsing).
 - Cross on a slot opens the list of that kind: "pick up to N". Equipped items show a gold fill and their slot number;
   a counter "n / N" turns red when full; when full, the rest are dimmed and Cross on them is refused (red flash,

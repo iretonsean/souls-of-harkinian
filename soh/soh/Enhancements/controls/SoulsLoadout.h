@@ -10,8 +10,8 @@ extern "C" {
 #endif
 
 typedef enum {
-    SL_RIGHT,  // 3 slots: swords, hammer, Deku Stick
-    SL_LEFT,   // 3 slots: slingshot, bow, hookshot, longshot, boomerang, catalyst
+    SL_RIGHT,  // 3 slots: any armament (R1)
+    SL_LEFT,   // 3 slots: any armament (L1)
     SL_SPELL,  // 3 slots: Din's Fire, Farore's Wind, Nayru's Love
     SL_ARROW,  // 2 slots: fire, ice, light arrows
     SL_QUICK,  // 8 slots: consumables + Epona
@@ -58,6 +58,10 @@ bool SoulsLoadout_ButtonItemsStashed(void);
 bool SoulsLoadout_TemporaryB(void);
 // SaveManager calls this on the copy of the save context it is about to write (void* = SaveContext*)
 void SoulsLoadout_PatchSaveCopy(void* saveContext);
+
+// Both hands take every armament (swords, hammer, Deku Stick, ranged tools, catalyst), one copy per item.
+// Slot of the item in the OTHER hand than kind (SL_RIGHT / SL_LEFT), -1 if it is not there or kind is not a hand.
+int SoulsLoadout_OtherHandIndexOf(SoulsLoadoutKind kind, uint8_t item);
 
 #ifdef __cplusplus
 }
