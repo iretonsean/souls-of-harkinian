@@ -155,10 +155,14 @@ static u32 sPendFrame = 0, sPendOutUntil = 0;
 static int sPendOutHand = -1;
 static const u32 kPendMaxFrames = 60, kPendOutFrames = 6;
 // Switching what is in Link's hand: when the old item is out (sword drawn, Deku Stick, Hammer), the new one comes out
-// ready, by the game's own item change, and the change does not end with a swing (sNoSlashUntil, see the hook below).
+// ready, by the game's own item change, and the change does not end with a swing (sNoSlashLeft, see the hook below).
 static bool sDrawReq = false;       // a D-pad switch asked for this item to come out (ITEM_NONE = put the old one away)
 static u8 sDrawReqItem = ITEM_NONE;
-static u32 sDrawReqFrame = 0, sNoSlashUntil = 0;
+static u32 sDrawReqFrame = 0;
+static int sNoSlashLeft = 0;        // frames left in which the change to sNoSlashItem does not end with a swing
+static u8 sNoSlashItem = ITEM_NONE;
+static bool sSlashWait = false;     // R2 tapped, the right-hand sword is not on B yet: jump slash once it is
+static u32 sSlashWaitFrame = 0;
 static const u32 kGuardResumeFrames = 8; // game frames after the attack input before the guard comes back
 static u32 sForceAttackFrame = 0;
 static const int kR2HoldMs = 160; // a R2 press shorter than this is a tap
@@ -224,6 +228,18 @@ static bool ItemInUse(Player* player) {
 
 static bool ItemInUseNow() {
     return gPlayState != nullptr && ItemInUse(GET_PLAYER(gPlayState));
+}
+
+// The game's item change runs over several frames: the held item (heldItemId) is the new one while the held action
+// is still the old one. (PLAYER_STATE1_START_CHANGING_HELD_ITEM is cleared the frame after the change starts.)
+static bool ItemChanging(Player* player) {
+    return player != nullptr && Player_ItemToItemAction(player->heldItemId) != player->heldItemAction;
+}
+
+// This sword is on B. The game puts the broken Giant's Knife on B when it breaks, which counts as the Giant's Knife.
+static bool SwordOnB(u8 sword) {
+    u8 b = gSaveContext.equips.buttonItems[0];
+    return b == sword || (sword == ITEM_SWORD_BGS && b == ITEM_SWORD_KNIFE);
 }
 
 static u32 GameFrame() {
@@ -360,6 +376,17 @@ static u16 SoulsInput_Play(u16 in) {
     if (r2 && !sPrevR2) {
         sR2Start = now;
     }
+    if (sSlashWait) {
+        Player* pl = gPlayState != nullptr ? GET_PLAYER(gPlayState) : nullptr;
+        u8 rs = UsableCurrent(SL_RIGHT);
+        if (SoulsLoadout_TemporaryB() || !IsSword(rs) || GameFrame() - sSlashWaitFrame > kPendMaxFrames) {
+            sSlashWait = false;
+        } else if (SwordOnB(rs) && !ItemChanging(pl)) {
+            sSlashWait = false;
+            sSlashPending = true;
+            sSlashFrame = GameFrame();
+        }
+    }
     bool r2Held = r2 && std::chrono::duration_cast<std::chrono::milliseconds>(now - sR2Start).count() >= kR2HoldMs;
     bool temporaryB = SoulsLoadout_TemporaryB(); // a minigame item is on B: R1 and R2 both press B
     bool r1 = (in & BTN_B) || r2Held || (r2 && temporaryB) || (sForceAttack && GameFrame() - sForceAttackFrame <= 8);
@@ -367,10 +394,10 @@ static u16 SoulsInput_Play(u16 in) {
         std::chrono::duration_cast<std::chrono::milliseconds>(now - sR2Start).count() < kR2HoldMs) {
         // R2 tap: the jump slash with a sword, else the same as R1
         u8 rs = UsableCurrent(SL_RIGHT);
-        if (IsSword(rs) && gSaveContext.equips.buttonItems[0] == rs) {
+        if (IsSword(rs)) {
             sSwordHand = 0;
-            sSlashPending = true;
-            sSlashFrame = GameFrame();
+            sSlashWait = true; // the jump slash goes out as soon as the sword is on B and out of any change
+            sSlashWaitFrame = GameFrame();
         } else {
             sForceAttack = true;
             sForceAttackFrame = GameFrame();
@@ -450,6 +477,8 @@ static u16 SoulsInput_Play(u16 in) {
             Player* pl = gPlayState != nullptr ? GET_PLAYER(gPlayState) : nullptr;
             u8 old = UsableCurrent(kind);
             bool wasOut = HandItemOut(pl, old);
+            if (sPendHand == hand) sPendHand = -1;
+            if (sPendOutHand == hand) sPendOutUntil = 0;
             SoulsLoadout_Cycle(kind, 1);
             u8 now2 = UsableCurrent(kind);
             if (IsSword(now2)) {
@@ -476,6 +505,11 @@ static u16 SoulsInput_Play(u16 in) {
         u8 item = hand == 0 ? right : left;
         bool pressed = hand == 0 ? r1 : l1;
         bool prev = hand == 0 ? sPrevR1 : sPrevL1;
+        bool swordHand = IsSword(item);
+        if (!swordHand || temporaryB || item == ITEM_NONE) { // nothing queued for a hand that holds no sword now
+            if (sPendHand == hand) sPendHand = -1;
+            if (sPendOutHand == hand) sPendOutUntil = 0;
+        }
         if (hand == 0 && temporaryB) {
             if (pressed) out |= BTN_B; // horseback archery, shooting galleries, Bombchu Bowling, fishing rod
             continue;
@@ -484,27 +518,31 @@ static u16 SoulsInput_Play(u16 in) {
             continue;
         }
         if (pressed && !prev) SoulsLoadout_NoteUse(hand == 0 ? SL_RIGHT : SL_LEFT);
-        if (!IsSword(item)) {
+        if (!swordHand) {
             if (pressed) out |= hand == 0 ? BTN_CRIGHT : BTN_CDOWN;
             continue;
         }
+        if (temporaryB) {
+            continue; // the left hand on a horse or in a minigame: no swing is queued
+        }
         Player* pl = gPlayState != nullptr ? GET_PLAYER(gPlayState) : nullptr;
-        bool changing = pl != nullptr && (pl->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM);
-        bool ready = gSaveContext.equips.buttonItems[0] == item && !changing; // not while the sword is changing
+        bool ready = SwordOnB(item) && !ItemChanging(pl); // not while the sword is changing
         if (pressed && !prev) {
             sSwordHand = hand; // SyncLoadout switches the sword to this hand's
+            if (sPendHand >= 0 && sPendHand != hand) sPendHand = -1; // B goes to this hand now
+            if (sPendOutHand != hand) sPendOutUntil = 0;
             if (!ready) {
                 sPendHand = hand;
                 sPendFrame = GameFrame();
             }
         }
         if (sPendHand == hand) {
-            if (ready) {
+            if (GameFrame() - sPendFrame > kPendMaxFrames) {
+                sPendHand = -1;
+            } else if (ready) {
                 sPendHand = -1;
                 sPendOutHand = hand;
                 sPendOutUntil = GameFrame() + kPendOutFrames; // the press that waited goes out as a short swing
-            } else if (GameFrame() - sPendFrame > kPendMaxFrames) {
-                sPendHand = -1;
             }
         }
         if (ready && (pressed || (sPendOutHand == hand && GameFrame() < sPendOutUntil))) {
@@ -515,7 +553,7 @@ static u16 SoulsInput_Play(u16 in) {
     // L2: guard with the equipped shield (the game's R button), always available. An attack (R1 / R2) while guarding
     // lowers the shield first (one game frame with neither, so Link leaves the guard), then attacks; the guard comes
     // back kGuardResumeFrames after the attack input ends if L2 is still held.
-    bool attackNow = (r1 && (right != ITEM_NONE || temporaryB)) || sSlashPending || swordPressed;
+    bool attackNow = (r1 && (right != ITEM_NONE || temporaryB)) || sSlashPending || sSlashWait || swordPressed;
     if (attackNow && !sPrevAttack) {
         sAttackStartFrame = GameFrame();
     }
@@ -600,6 +638,7 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     sSlashPending = false;
     sPendHand = -1;
     sPendOutUntil = 0;
+    sSlashWait = false;
 
     if (SoulsInput_InOcarina()) {
         // Cross = A note, D-pad = C notes, Circle (and R1) puts the ocarina away. Triangle does nothing here: it is
@@ -733,7 +772,8 @@ static void RegisterSoulsJump() {
 static void RegisterSoulsNoSlash() {
     // After a switch the new item is in hand and ready, not swung
     COND_VB_SHOULD(VB_USE_HELD_ITEM_AFTER_CHANGE, CVarGetInteger(CVAR_SOULS_CONTROLS, 0), {
-        if (GameFrame() < sNoSlashUntil) {
+        Player* player = va_arg(args, Player*);
+        if (sNoSlashLeft > 0 && player != nullptr && player->heldItemId == sNoSlashItem) {
             *should = false;
         }
     });
@@ -851,7 +891,7 @@ static void EquipSword(PlayState* play, Player* player, u8 sword) {
     gSaveContext.equips.buttonItems[0] = sword;
     Inventory_ChangeEquipment(EQUIP_TYPE_SWORD, value);
     gSaveContext.infTable[29] = 0;
-    if (sword == ITEM_SWORD_BGS) {
+    if (sword == ITEM_SWORD_BGS && !(gSaveContext.bgsFlag == 0 && gSaveContext.swordHealth == 0)) { // a broken knife stays broken
         gSaveContext.swordHealth = 8;
     }
     Interface_LoadItemIcon1(play, 0);
@@ -865,6 +905,10 @@ static void SyncLoadout() {
     Player* player = GET_PLAYER(gPlayState);
     if (player == nullptr) {
         return;
+    }
+    // The no-swing mark of a switch ends when the change is over
+    if (sNoSlashLeft > 0 && (--sNoSlashLeft == 0 || !ItemChanging(player))) {
+        sNoSlashLeft = 0;
     }
     // The player's own buttons are kept first; during minigames (B holds a temporary item) and while an item is in
     // use (a bottle being drunk) the buttons are left alone
@@ -900,7 +944,7 @@ static void SyncLoadout() {
         if (sDrawReq) {
             if (GameFrame() - sDrawReqFrame > 40) {
                 sDrawReq = false;
-            } else if (player->heldItemAction == player->itemAction) {
+            } else if (player->heldItemAction == player->itemAction && !ItemChanging(player)) {
                 u8 req = sDrawReqItem;
                 sDrawReq = false;
                 if (req == ITEM_NONE) {
@@ -910,7 +954,8 @@ static void SyncLoadout() {
                     if (IsSword(req) && gSaveContext.equips.buttonItems[0] != req) {
                         EquipSword(gPlayState, player, req);
                     }
-                    sNoSlashUntil = GameFrame() + 60;
+                    sNoSlashLeft = 60;
+                    sNoSlashItem = req;
                     Player_UseItem(gPlayState, player, req);
                     acted = true;
                 }
@@ -925,11 +970,19 @@ static void SyncLoadout() {
         } else if (IsSword(second)) {
             want = second;
         }
-        if (!acted && want != ITEM_NONE && gSaveContext.equips.buttonItems[0] != want) {
+        if (!acted && want != ITEM_NONE && !SwordOnB(want)) {
             if (player->heldItemAction >= PLAYER_IA_SWORD_MASTER && player->heldItemAction <= PLAYER_IA_SWORD_BIGGORON) {
-                if (player->heldItemAction == player->itemAction) {
+                // (not while a change runs: the old item is still being put away, the sword is switched after that)
+                if (player->heldItemAction == player->itemAction && !ItemChanging(player)) {
                     EquipSword(gPlayState, player, want);
-                    sNoSlashUntil = GameFrame() + 60;
+                    if (sPendHand >= 0) {
+                        // a button press switched it: the game's own swing after the change is that press's swing
+                        sPendHand = -1;
+                        sPendOutUntil = 0;
+                    } else {
+                        sNoSlashLeft = 60; // a D-pad or R2 switch: the new sword comes out ready, not swung
+                        sNoSlashItem = want;
+                    }
                     Player_UseItem(gPlayState, player, want);
                 }
             } else {
