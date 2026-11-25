@@ -131,6 +131,10 @@ static std::chrono::steady_clock::time_point sR2Start;
 static bool sSlashPending = false; // R2 tapped: jump slash on the next item-button check
 static u32 sSlashFrame = 0;
 static bool sForceAttack = false; // press the right-hand attack for a few game frames
+// Attack while guarding: the shield comes down for the attack and goes back up after it while L2 is still held
+static bool sPrevAttack = false, sGuardWasUp = false;
+static u32 sAttackStartFrame = 0;
+static const u32 kGuardResumeFrames = 8; // game frames after the attack input before the guard comes back
 static u32 sForceAttackFrame = 0;
 static const int kR2HoldMs = 160; // a R2 press shorter than this is a tap
 
@@ -145,6 +149,15 @@ static bool sTriPrev = false, sASent = false, sTriUsed = false, sTapActive = fal
 static std::chrono::steady_clock::time_point sTriStart, sTapStart;
 static u32 sTapFrame = 0;
 static const int kTapWindowMs = 70;
+// "Talk" with the sword out: one Triangle tap puts the sword away, then A goes out by itself and the talk starts
+static bool sTalkChain = false;
+static u32 sTalkChainFrame = 0;
+static const u32 kTalkChainMaxFrames = 30;
+
+static bool SwordOut(Player* player) {
+    return player->heldItemAction >= PLAYER_IA_SWORD_MASTER && player->heldItemAction <= PLAYER_IA_SWORD_BIGGORON;
+}
+
 static const int kTapMaxMs = 350; // a longer Triangle hold that ends without a D-pad press is a look at the pouch, not A
 
 // The action shown on Triangle needs A held down (grab a block to push or pull it)
@@ -379,6 +392,25 @@ static u16 SoulsInput_Play(u16 in) {
         sTriUsed = false;
         sASent = false;
     }
+    if (gPlayState != nullptr) {
+        Player* player = GET_PLAYER(gPlayState);
+        bool talkOffered = gPlayState->interfaceCtx.unk_1F0 == DO_ACTION_SPEAK;
+        if (sendA && talkOffered && SwordOut(player)) {
+            sendA = false; // put the sword away first; A follows when it's away
+            if (player->heldItemAction == player->itemAction) {
+                Player_UseItem(gPlayState, player, ITEM_NONE);
+            }
+            sTalkChain = true;
+            sTalkChainFrame = GameFrame();
+        } else if (sTalkChain) {
+            if (!SwordOut(player) && talkOffered) {
+                sendA = true;
+                sTalkChain = false;
+            } else if (GameFrame() - sTalkChainFrame > kTalkChainMaxFrames) {
+                sTalkChain = false;
+            }
+        }
+    }
     if (sendA) out |= BTN_A;
     sTriPrev = triangle;
     if (!triangle && !ItemInUseNow()) {
@@ -403,8 +435,24 @@ static u16 SoulsInput_Play(u16 in) {
         out |= BTN_CDOWN;
         if (!sPrevL1) SoulsLoadout_NoteUse(SL_LEFT);
     }
-    // L2: guard with the equipped shield (the game's R button), always available
-    if (l2) out |= BTN_R;
+    // L2: guard with the equipped shield (the game's R button), always available. An attack (R1 / R2) while guarding
+    // lowers the shield first (one game frame with neither, so Link leaves the guard), then attacks; the guard comes
+    // back kGuardResumeFrames after the attack input ends if L2 is still held.
+    bool attackNow = r1 || sSlashPending;
+    if (attackNow && !sPrevAttack) {
+        sAttackStartFrame = GameFrame();
+    }
+    sPrevAttack = attackNow;
+    bool guardDown = attackNow || GameFrame() - sAttackStartFrame < kGuardResumeFrames;
+    if (l2 && !guardDown) {
+        out |= BTN_R;
+    }
+    if (l2 && attackNow && sGuardWasUp && GameFrame() == sAttackStartFrame) {
+        out &= ~(BTN_B | BTN_CRIGHT); // this frame only lowers the shield
+    }
+    if (GameFrame() != sAttackStartFrame || !attackNow) {
+        sGuardWasUp = (out & BTN_R) != 0;
+    }
     // Square: the quick item, on C-left
     if (square) {
         out |= BTN_CLEFT;
@@ -439,6 +487,10 @@ extern "C" {
 uint16_t gSoulsRawPadButtons = 0;
 }
 
+extern "C" u8 SoulsInput_NoAutoJump(void) {
+    return CVarGetInteger(CVAR_SOULS_CONTROLS, 0) != 0;
+}
+
 extern "C" void SoulsInput_Transform(u16* buttons) {
     if (!CVarGetInteger(CVAR_SOULS_CONTROLS, 0)) {
         return;
@@ -464,6 +516,8 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     }
     sPrevDpad = in & DPAD_BITS;
     sPrevR1 = sPrevL1 = sPrevSquare = sPrevR2 = false;
+    sPrevAttack = sGuardWasUp = false;
+    sTalkChain = false;
     sSlashPending = false;
 
     if (SoulsInput_InOcarina()) {

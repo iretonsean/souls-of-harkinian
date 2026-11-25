@@ -25,6 +25,7 @@
 #include "soh/Enhancements/item-tables/ItemTableTypes.h"
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/enhancementTypes.h"
+#include "soh/Enhancements/controls/SoulsInput.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
@@ -5824,8 +5825,11 @@ void func_8083AA10(Player* this, PlayState* play) {
                         }
                     }
 
-                    func_8083A4A8(this, play);
-                    return;
+                    // Souls of Harkinian: Cross is the jump, so Link doesn't jump by himself at an edge (he falls)
+                    if (!SoulsInput_NoAutoJump()) {
+                        func_8083A4A8(this, play);
+                        return;
+                    }
                 }
 
                 if ((sPrevFloorProperty == FLOOR_PROPERTY_9) || (sYDistToFloor <= this->ageProperties->unk_34) ||

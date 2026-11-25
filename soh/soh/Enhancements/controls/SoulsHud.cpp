@@ -663,9 +663,10 @@ static void DrawPrompt(PlayState* play, const char* word) {
 
 // The words OoT's A button shows (the do-action labels, in the order of the DO_ACTION_ ids); nullptr = no label.
 static const char* ActionWord(PlayState* play) {
-    static const char* const kWords[] = { "Attack", "Check", "Enter", "Return", "Open", "Jump", "Decide", "Dive",
-                                          "Faster", "Throw", nullptr, "Climb", "Drop", "Down", "Save", "Speak",
-                                          "Next", "Grab", "Stop", "Put Away", "Reel" };
+    // Only the prompts for using something next to Link (as in Elden Ring); movement, combat and text prompts are off
+    static const char* const kWords[] = { nullptr, "Check", "Enter", nullptr, "Open", nullptr, nullptr, nullptr,
+                                          nullptr, nullptr, nullptr, "Climb", nullptr, nullptr, nullptr, "Talk",
+                                          nullptr, "Grab", nullptr, nullptr, nullptr };
     InterfaceContext* ic = &play->interfaceCtx;
     if (ic->aAlpha < 40 || play->pauseCtx.state != 0 || play->pauseCtx.debugState != 0) {
         return nullptr; // faded out, or the game is paused: no prompt
