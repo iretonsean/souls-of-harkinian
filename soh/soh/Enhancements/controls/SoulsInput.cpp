@@ -158,6 +158,9 @@ static bool SwordOut(Player* player) {
     return player->heldItemAction >= PLAYER_IA_SWORD_MASTER && player->heldItemAction <= PLAYER_IA_SWORD_BIGGORON;
 }
 
+static bool sMenuTriPrev = false; // Triangle in a text box
+static std::chrono::steady_clock::time_point sMenuTriStart;
+static const int kTextSkipHoldMs = 300;
 static const int kTapMaxMs = 350; // a longer Triangle hold that ends without a D-pad press is a look at the pouch, not A
 
 // The action shown on Triangle needs A held down (grab a block to push or pull it)
@@ -549,6 +552,7 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     }
 
     // Menus: R2 = B, L2 = Z, L3 = R, as before the loadout. Cross (Modifier 2) confirms; the touchpad does nothing.
+    bool pauseOff = gPlayState != nullptr && gPlayState->pauseCtx.state == 0 && gPlayState->pauseCtx.debugState == 0;
     bool crossDown = (in & BTN_CUSTOM_MODIFIER2) != 0;
     in &= ~(BTN_CUSTOM_MODIFIER2 | BTN_L);
     if (crossDown) in |= BTN_L; // below, BTN_L means Cross
@@ -572,6 +576,21 @@ extern "C" void SoulsInput_Transform(u16* buttons) {
     }
     if (in & BTN_L) {
         out |= BTN_A; // Cross: confirm
+    }
+    // Text box: a Triangle tap turns one page (A); holding Triangle fast-forwards like holding B does with the
+    // Skip Text setting. Not in choice boxes (a held skip there would pick an answer).
+    bool triHeld = (in & BTN_A) && !(in & BTN_SOULS_MOD1);
+    auto now = std::chrono::steady_clock::now();
+    if (triHeld && !sMenuTriPrev) {
+        sMenuTriStart = now;
+    }
+    sMenuTriPrev = triHeld;
+    if (triHeld && gPlayState != nullptr && pauseOff && gPlayState->msgCtx.msgMode != MSGMODE_NONE &&
+        gPlayState->msgCtx.textboxEndType != TEXTBOX_ENDTYPE_2_CHOICE &&
+        gPlayState->msgCtx.textboxEndType != TEXTBOX_ENDTYPE_3_CHOICE &&
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - sMenuTriStart).count() >= kTextSkipHoldMs) {
+        out &= ~BTN_A;
+        out |= BTN_B;
     }
     sCrossWasDown = (in & BTN_L) != 0;
     sJumpPending = false;
