@@ -247,6 +247,14 @@ static u32 GameFrame() {
 }
 
 static u8 PouchSlotOf(u8 item) {
+    if (item == ITEM_LETTER_RUTO) { // kept in a bottle slot
+        for (int s = SLOT_BOTTLE_1; s <= SLOT_BOTTLE_4; s++) {
+            if (gSaveContext.inventory.items[s] == item) {
+                return (u8)s;
+            }
+        }
+        return (u8)SLOT_NONE;
+    }
     if (item >= ITEM_WEIRD_EGG && item <= ITEM_CLAIM_CHECK && item != ITEM_SOLD_OUT) {
         return gSaveContext.inventory.items[SLOT_TRADE_ADULT] == item ? (u8)SLOT_TRADE_ADULT : (u8)SLOT_TRADE_CHILD;
     }

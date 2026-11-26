@@ -146,6 +146,8 @@ bool CanEquipPouch(uint8_t item) {
             return InInventory(item);
         case ITEM_BEAN:
             return InInventory(item) && ItemAgeOk(item);
+        case ITEM_LETTER_RUTO: // kept in a bottle slot, not a trade slot
+            return HasBottleWith(item);
         case SOULS_ITEM_TOGGLE_IRON:
             return OwnsEquip(EQUIP_TYPE_BOOTS, EQUIP_VALUE_BOOTS_IRON) &&
                    AgeOk(gEquipAgeReqs[EQUIP_TYPE_BOOTS][EQUIP_VALUE_BOOTS_IRON], item);
