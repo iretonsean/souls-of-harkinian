@@ -247,7 +247,7 @@ static u32 GameFrame() {
 }
 
 static u8 PouchSlotOf(u8 item) {
-    if (item >= ITEM_LETTER_ZELDA && item <= ITEM_CLAIM_CHECK) {
+    if (item >= ITEM_WEIRD_EGG && item <= ITEM_CLAIM_CHECK && item != ITEM_SOLD_OUT) {
         return gSaveContext.inventory.items[SLOT_TRADE_ADULT] == item ? (u8)SLOT_TRADE_ADULT : (u8)SLOT_TRADE_CHILD;
     }
     return gItemSlots[item];

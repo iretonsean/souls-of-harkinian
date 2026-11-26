@@ -154,7 +154,7 @@ bool CanEquipPouch(uint8_t item) {
                    AgeOk(gEquipAgeReqs[EQUIP_TYPE_BOOTS][EQUIP_VALUE_BOOTS_HOVER], item);
     }
     // Masks and trade items: they share two inventory slots, so only the one held now counts as owned
-    if (item >= ITEM_LETTER_ZELDA && item <= ITEM_CLAIM_CHECK) {
+    if (item >= ITEM_WEIRD_EGG && item <= ITEM_CLAIM_CHECK && item != ITEM_SOLD_OUT) {
         return (gSaveContext.inventory.items[SLOT_TRADE_CHILD] == item ||
                 gSaveContext.inventory.items[SLOT_TRADE_ADULT] == item) &&
                ItemAgeOk(item);
